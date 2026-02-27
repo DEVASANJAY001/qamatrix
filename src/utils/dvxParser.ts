@@ -49,11 +49,12 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
 
   // Find columns - use exact name first for "Defect Description" vs "Defect Description Details"
   const dateCol = findCol(headers, "Date");
+  const locationCodeCol = findCol(headers, "Location Code", "Loc Code");
   const locationCol = findCol(headers, "Location Details", "Location");
   const codeCol = findCol(headers, "Defect Code");
   // For description vs details: match exact first to avoid collision
-  const descCol = headers.indexOf("defect description") !== -1 
-    ? headers.indexOf("defect description") 
+  const descCol = headers.indexOf("defect description") !== -1
+    ? headers.indexOf("defect description")
     : findCol(headers, "Defect Description");
   const detailsCol = findCol(headers, "Defect Description Details");
   const gravityCol = findCol(headers, "Gravity");
@@ -64,7 +65,7 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
   const pofCodeCol = findCol(headers, "POF CODE", "POF Code");
 
   console.log("Header row:", headerRowIdx, "Columns found:", {
-    date: dateCol, location: locationCol, code: codeCol, 
+    date: dateCol, location: locationCol, code: codeCol,
     desc: descCol, details: detailsCol, gravity: gravityCol,
     qty: qtyCol, source: sourceCol
   });
@@ -91,6 +92,7 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
 
     entries.push({
       date: getVal(row, dateCol),
+      locationCode: getVal(row, locationCodeCol),
       locationDetails: location,
       defectCode: getVal(row, codeCol),
       defectDescription: desc,

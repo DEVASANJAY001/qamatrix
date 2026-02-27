@@ -12,7 +12,7 @@ function dbRowToEntry(row: any): QAMatrixEntry {
   const qControlDetail = (row.q_control_detail || {}) as any;
   const controlRating = (row.control_rating || {}) as any;
   const guaranteedQuality = (row.guaranteed_quality || {}) as any;
-  const weeklyRecurrence = (row.weekly_recurrence || [0,0,0,0,0,0]) as number[];
+  const weeklyRecurrence = (row.weekly_recurrence || [0, 0, 0, 0, 0, 0]) as number[];
 
   return {
     sNo: row.s_no,
@@ -167,6 +167,20 @@ export function useQAMatrixDB() {
     }
   }, []);
 
+  const deleteAll = useCallback(async () => {
+    const { error } = await supabase
+      .from("qa_matrix_entries")
+      .delete()
+      .neq("s_no", -9999); // delete all rows
+    if (error) {
+      console.error("Delete all error:", error);
+      toast({ title: "Delete Error", description: error.message, variant: "destructive" });
+      return false;
+    }
+    setData([]);
+    return true;
+  }, []);
+
   const updateData = useCallback((updater: (prev: QAMatrixEntry[]) => QAMatrixEntry[]) => {
     setData(prev => {
       const next = updater(prev);
@@ -185,5 +199,5 @@ export function useQAMatrixDB() {
     });
   }, []);
 
-  return { data, loading, setData, updateData, fetchData, saveEntry, saveMultiple, deleteEntry };
+  return { data, loading, setData, updateData, fetchData, saveEntry, saveMultiple, deleteEntry, deleteAll };
 }

@@ -81,11 +81,22 @@ const PairingContainer = ({
                         <div key={idx} className="flex items-center gap-2 p-2 rounded border border-border/50 bg-card text-xs">
                           <ArrowRight className="w-3 h-3 text-muted-foreground shrink-0" />
                           <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              {dvx.defectCode && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-600 text-[10px] font-mono font-bold">
+                                  {dvx.defectCode}
+                                </span>
+                              )}
+                              {dvx.locationCode && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 text-[10px] font-mono font-bold">
+                                  📍 {dvx.locationCode}
+                                </span>
+                              )}
+                            </div>
                             <span className="font-semibold">{dvx.defectDescription}</span>
                             {dvx.defectDescriptionDetails && (
                               <span className="text-muted-foreground"> — {dvx.defectDescriptionDetails}</span>
                             )}
-                            <span className="text-muted-foreground ml-2">({dvx.locationDetails})</span>
                           </div>
                           <span className="text-[10px] bg-muted px-1.5 py-0.5 rounded">Qty: {dvx.quantity}</span>
 

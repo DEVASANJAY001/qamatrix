@@ -3,7 +3,7 @@ import { QAMatrixEntry } from "@/types/qaMatrix";
 import { X, Filter, ChevronDown } from "lucide-react";
 import {
   PieChart, Pie, Cell, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  Tooltip,
 } from "recharts";
 
 interface MatrixDashboardProps {
@@ -133,80 +133,35 @@ const MatrixTable = ({
   </div>
 );
 
-// ─── Section Panel (side-by-side: table left, charts right) ─
+// ─── Section Panel (donuts centered top, matrix table below) ─
 const SectionPanel = ({
   title,
   sectionColor,
   donuts,
-  barData,
-  barType,
   onDonutClick,
-  onBarClick,
   onMatrixCellClick,
 }: {
   title: string;
   sectionColor: string;
   donuts: DonutItem[];
-  barData: { name: string; OK: number; NG: number }[];
-  barType: "grouped" | "stacked";
   onDonutClick: (type: "ok" | "ng", item: DonutItem) => void;
-  onBarClick: (label: string) => void;
   onMatrixCellClick: (label: string, type: "total" | "ok" | "ng") => void;
 }) => (
-  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    {/* Left: Matrix Table */}
+  <div className="flex flex-col gap-4">
+    {/* Top: Donuts centered */}
+    <div className="flex flex-wrap justify-center gap-6 p-4 rounded-lg border border-border bg-card">
+      {donuts.map((d) => (
+        <MiniDonut key={d.label} item={d} onClickSegment={onDonutClick} />
+      ))}
+    </div>
+
+    {/* Bottom: Matrix Table */}
     <MatrixTable
       sectionTitle={title}
       sectionColor={sectionColor}
       rows={donuts}
       onCellClick={(label, type) => onMatrixCellClick(label, type)}
     />
-
-    {/* Right: Donuts + Bar Chart */}
-    <div className="space-y-4">
-      {/* Donuts row */}
-      <div className="flex flex-wrap justify-center gap-4 p-3 rounded-lg border border-border bg-card">
-        {donuts.map((d) => (
-          <MiniDonut key={d.label} item={d} onClickSegment={onDonutClick} />
-        ))}
-      </div>
-
-      {/* Bar chart */}
-      <div className="h-[200px] w-full rounded-lg border border-border bg-card p-3">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={barData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-            <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} />
-            <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} allowDecimals={false} />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
-            />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar
-              dataKey="OK"
-              fill={OK_COLOR}
-              stackId={barType === "stacked" ? "a" : undefined}
-              radius={[4, 4, 0, 0]}
-              onClick={(d) => onBarClick(d.name)}
-              className="cursor-pointer"
-            />
-            <Bar
-              dataKey="NG"
-              fill={NG_COLOR}
-              stackId={barType === "stacked" ? "a" : undefined}
-              radius={[4, 4, 0, 0]}
-              onClick={(d) => onBarClick(d.name)}
-              className="cursor-pointer"
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
   </div>
 );
 
@@ -322,29 +277,38 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
   // Drill-down handlers
   const handleDonutClick = useCallback(
     (type: "ok" | "ng", item: DonutItem) => {
-      // Apply the filter from the donut
-      if (item.filterType === "status") {
-        updateFilter("status", item.filterValue);
-      } else if (item.filterType === "area") {
-        updateFilter("area", item.filterValue);
-      } else if (item.filterType === "source") {
-        updateFilter("source", item.filterValue);
-      }
+      // Apply filter chips
+      if (item.filterType === "status") updateFilter("status", item.filterValue);
+      else if (item.filterType === "area") updateFilter("area", item.filterValue);
+      else if (item.filterType === "source") updateFilter("source", item.filterValue);
       updateFilter("result", type === "ok" ? "OK" : "NG");
-    },
-    [updateFilter]
-  );
 
-  const handleBarClick = useCallback(
-    (label: string) => {
-      // Determine which section's bar was clicked based on the label
-      const areas = ["TRIM", "CHASSIS", "FINAL"];
-      const sources = ["DVX", "SCA", "ER3", "ER4", "FIELD"];
-      if (areas.includes(label)) updateFilter("area", label);
-      else if (sources.includes(label)) updateFilter("source", label);
-      else if (["WS", "MFG", "PLANT"].includes(label)) updateFilter("status", label);
+      // Also open drill-down modal immediately with computed entries
+      const d = filtered;
+      let entries: QAMatrixEntry[] = [];
+
+      if (item.filterType === "status") {
+        const okFn = (e: QAMatrixEntry) =>
+          item.filterValue === "WS" ? e.workstationStatus === "OK" :
+            item.filterValue === "MFG" ? e.mfgStatus === "OK" :
+              e.plantStatus === "OK";
+        entries = type === "ok" ? d.filter(okFn) : d.filter((e) => !okFn(e));
+      } else if (item.filterType === "area") {
+        const areaEntries = d.filter((e) => e.designation.toUpperCase() === item.filterValue);
+        entries = type === "ok"
+          ? areaEntries.filter((e) => e.plantStatus === "OK")
+          : areaEntries.filter((e) => e.plantStatus === "NG");
+      } else {
+        const srcEntries = d.filter((e) => e.source.toUpperCase() === item.filterValue);
+        entries = type === "ok"
+          ? srcEntries.filter((e) => e.plantStatus === "OK")
+          : srcEntries.filter((e) => e.plantStatus === "NG");
+      }
+
+      const title = `${item.filterValue} — ${type.toUpperCase()}`;
+      if (entries.length > 0) setDrillDown({ title: `${title} (${entries.length})`, entries });
     },
-    [updateFilter]
+    [updateFilter, filtered]
   );
 
   const handleDrillOpen = useCallback(
@@ -364,8 +328,8 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
       if (sectionType === "status") {
         const okFn = (e: QAMatrixEntry) =>
           label === "WS" ? e.workstationStatus === "OK" :
-          label === "MFG" ? e.mfgStatus === "OK" :
-          e.plantStatus === "OK";
+            label === "MFG" ? e.mfgStatus === "OK" :
+              e.plantStatus === "OK";
         if (cellType === "total") entries = d;
         else if (cellType === "ok") entries = d.filter(okFn);
         else entries = d.filter((e) => !okFn(e));
@@ -437,11 +401,10 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
             <button
               key={tab}
               onClick={() => setActiveSection(tab)}
-              className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${
-                activeSection === tab
-                  ? "bg-card shadow text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${activeSection === tab
+                ? "bg-card shadow text-primary"
+                : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               {tab}
             </button>
@@ -454,10 +417,7 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
             title="Status"
             sectionColor="bg-blue-600"
             donuts={statusDonuts}
-            barData={statusBar}
-            barType="grouped"
             onDonutClick={handleDonutClick}
-            onBarClick={handleBarClick}
             onMatrixCellClick={(label, type) => handleMatrixCellClick("status", label, type)}
           />
         )}
@@ -466,10 +426,7 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
             title="Area"
             sectionColor="bg-green-600"
             donuts={areaDonuts}
-            barData={areaBar}
-            barType="stacked"
             onDonutClick={handleDonutClick}
-            onBarClick={handleBarClick}
             onMatrixCellClick={(label, type) => handleMatrixCellClick("area", label, type)}
           />
         )}
@@ -478,17 +435,14 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
             title="Source"
             sectionColor="bg-amber-600"
             donuts={sourceDonuts}
-            barData={sourceBar}
-            barType="grouped"
             onDonutClick={handleDonutClick}
-            onBarClick={handleBarClick}
             onMatrixCellClick={(label, type) => handleMatrixCellClick("source", label, type)}
           />
         )}
       </div>
 
       <p className="text-[10px] text-muted-foreground text-center">
-        Click any count, donut segment, or bar to drill down · Click "Clear" to reset filters
+        Click any count or donut segment to drill down · Click "Clear" to reset filters
       </p>
 
       {/* ─── Drill-down Modal ────────────────────────────── */}
@@ -524,11 +478,10 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
                       <td className="p-2 max-w-[250px] truncate" title={e.concern}>{e.concern}</td>
                       <td className="p-2">{e.source}</td>
                       <td className="p-2 text-center">
-                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          e.defectRating === 5 ? "bg-destructive/20 text-destructive" :
+                        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${e.defectRating === 5 ? "bg-destructive/20 text-destructive" :
                           e.defectRating === 3 ? "bg-[hsl(var(--chart-4))]/20 text-[hsl(var(--chart-4))]" :
-                          "bg-[hsl(var(--chart-2))]/20 text-[hsl(var(--chart-2))]"
-                        }`}>{e.defectRating}</span>
+                            "bg-[hsl(var(--chart-2))]/20 text-[hsl(var(--chart-2))]"
+                          }`}>{e.defectRating}</span>
                       </td>
                       <td className={`p-2 text-center font-bold ${e.workstationStatus === "NG" ? "text-destructive" : "text-[hsl(var(--chart-2))]"}`}>{e.workstationStatus}</td>
                       <td className={`p-2 text-center font-bold ${e.mfgStatus === "NG" ? "text-destructive" : "text-[hsl(var(--chart-2))]"}`}>{e.mfgStatus}</td>

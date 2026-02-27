@@ -15,12 +15,18 @@ import { exportToCSV } from "@/utils/csvExport";
 import { exportToXLSX } from "@/utils/xlsxExport";
 import { aiMatchDefects } from "@/utils/aiMatch";
 import { useQAMatrixDB } from "@/hooks/useQAMatrixDB";
-import { Shield, Search, Filter, X, Download, FileSpreadsheet, RotateCcw, Repeat, Undo2, Database, Loader2 } from "lucide-react";
+import { Shield, Search, Filter, X, Download, FileSpreadsheet, RotateCcw, Repeat, Undo2, Database, Loader2, Trash2, Lock, AlertTriangle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const Index = () => {
-  const { data, loading: dbLoading, updateData: dbUpdateData, fetchData: refreshFromDB, saveMultiple, deleteEntry: dbDeleteEntry } = useQAMatrixDB();
+  const { data, loading: dbLoading, updateData: dbUpdateData, fetchData: refreshFromDB, saveMultiple, deleteEntry: dbDeleteEntry, deleteAll: dbDeleteAll } = useQAMatrixDB();
   const [activeTab, setActiveTab] = useState<"matrix" | "repeats">("matrix");
   const [dashboardView, setDashboardView] = useState<"summary" | "matrix-dashboard">("summary");
   const [filter, setFilter] = useState<{ rating?: 1 | 3 | 5; level?: string; status?: "OK" | "NG" } | null>(null);
@@ -44,6 +50,13 @@ const Index = () => {
   const [diffEntries, setDiffEntries] = useState<DiffEntry[]>([]);
   const [showDiffDialog, setShowDiffDialog] = useState(false);
 
+  // Delete all QA Matrix dialog state
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
+  const [deleteAllPassword, setDeleteAllPassword] = useState("");
+  const [deleteAllError, setDeleteAllError] = useState("");
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
+
+  const DELETE_PASSWORD = "qamatrix2024";
   const sources = useMemo(() => [...new Set(data.map(d => d.source))].sort(), [data]);
   const designations = useMemo(() => [...new Set(data.map(d => d.designation.toUpperCase()))].sort(), [data]);
 
@@ -82,6 +95,25 @@ const Index = () => {
     dbDeleteEntry(sNo);
   };
 
+  const handleDeleteAll = async () => {
+    if (deleteAllPassword !== DELETE_PASSWORD) {
+      setDeleteAllError("Incorrect password.");
+      return;
+    }
+    setDeleteAllLoading(true);
+    setDeleteAllError("");
+    const ok = await dbDeleteAll();
+    setDeleteAllLoading(false);
+    if (ok) {
+      toast({ title: "QA Matrix Cleared", description: "All entries have been deleted." });
+      setDeleteAllOpen(false);
+      setDeleteAllPassword("");
+      setIsRepeatApplied(false);
+      setPreApplySnapshot(null);
+      setDiffEntries([]);
+    }
+  };
+
   const handleFileImport = (entries: QAMatrixEntry[]) => {
     updateData(prev => [...prev, ...entries]);
     saveMultiple(entries);
@@ -98,6 +130,60 @@ const Index = () => {
   };
 
   // --- Repeat matching logic ---
+
+  // Code-based matching: exact match on defectCode + defectLocationCode
+  const runCodeMatching = useCallback((entries: DVXEntry[], currentData: QAMatrixEntry[]) => {
+    toast({ title: "Code Matching", description: "Matching by Defect Code + Location Code..." });
+
+    const matchMap = new Map<number, MatchedRepeat>();
+    const unmatchedList: UnmatchedDefect[] = [];
+
+    entries.forEach((dvx, idx) => {
+      const dvxCode = (dvx.defectCode || "").trim().toLowerCase();
+      const dvxLoc = (dvx.locationCode || "").trim().toLowerCase();
+
+      // Both defect code AND location code must be present and match
+      if (!dvxCode || !dvxLoc) {
+        unmatchedList.push({ dvxEntry: dvx, id: `unmatched-${idx}` });
+        return;
+      }
+
+      // Only pair when BOTH defect code AND location code match exactly
+      const bestQa = currentData.find(q => {
+        const qaCode = (q.defectCode || "").trim().toLowerCase();
+        const qaLoc = (q.defectLocationCode || "").trim().toLowerCase();
+        return qaCode && qaLoc && dvxCode === qaCode && dvxLoc === qaLoc;
+      });
+
+      if (bestQa) {
+        const existing = matchMap.get(bestQa.sNo);
+        if (existing) {
+          existing.dvxEntries.push(dvx);
+          existing.repeatCount += dvx.quantity;
+        } else {
+          matchMap.set(bestQa.sNo, {
+            dvxEntries: [dvx],
+            repeatCount: dvx.quantity,
+            qaSNo: bestQa.sNo,
+            qaConcern: bestQa.concern,
+            matchScore: 1.0,
+          });
+        }
+      } else {
+        unmatchedList.push({ dvxEntry: dvx, id: `unmatched-${idx}` });
+      }
+    });
+
+    const matchedArr = Array.from(matchMap.values()).sort((a, b) => b.repeatCount - a.repeatCount);
+    setMatched(matchedArr);
+    setUnmatched(unmatchedList);
+    setIsRepeatApplied(false);
+    setPreApplySnapshot(null);
+    setDiffEntries([]);
+    toast({ title: "Code Matching Complete", description: `${matchedArr.length} concerns paired, ${unmatchedList.length} unmatched` });
+  }, []);
+
+  // AI/Semantic matching
   const runMatching = useCallback(async (entries: DVXEntry[], currentData: QAMatrixEntry[]) => {
     setIsAIMatching(true);
     toast({ title: "AI Agent Matching", description: "Analyzing defects semantically..." });
@@ -152,13 +238,16 @@ const Index = () => {
     }
   }, []);
 
-  const handleRepeatFileUpload = useCallback((entries: DVXEntry[], fileName: string) => {
+  const handleRepeatFileUpload = useCallback((entries: DVXEntry[], fileName: string, mode: "code" | "semantic" = "semantic") => {
     setDvxEntries(entries);
     setRepeatFileName(fileName);
     setAddedIds(new Set());
-    // Use ref to current data to avoid calling runMatching inside setState
-    runMatching(entries, data);
-  }, [runMatching, data]);
+    if (mode === "code") {
+      runCodeMatching(entries, data);
+    } else {
+      runMatching(entries, data);
+    }
+  }, [runMatching, runCodeMatching, data]);
 
   const handleRepeatAddConcern = useCallback((entry: QAMatrixEntry) => {
     const newData = [...data, entry];
@@ -350,17 +439,15 @@ const Index = () => {
           <div className="ml-6 flex items-center gap-1 bg-muted rounded-lg p-0.5">
             <button
               onClick={() => setActiveTab("matrix")}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                activeTab === "matrix" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${activeTab === "matrix" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               QA Matrix
             </button>
             <button
               onClick={() => setActiveTab("repeats")}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
-                activeTab === "repeats" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${activeTab === "repeats" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               <Repeat className="w-3.5 h-3.5" />
               Repeats
@@ -399,6 +486,15 @@ const Index = () => {
                 <Button size="sm" variant="ghost" className="gap-1.5 text-destructive" onClick={() => { refreshFromDB(); setIsRepeatApplied(false); setPreApplySnapshot(null); setDiffEntries([]); }} title="Reload from database">
                   <RotateCcw className="w-4 h-4" />
                   Reset
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="gap-1.5"
+                  onClick={() => { setDeleteAllOpen(true); setDeleteAllPassword(""); setDeleteAllError(""); }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Clear QA Matrix
                 </Button>
               </>
             )}

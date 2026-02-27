@@ -69,6 +69,8 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
   const respCol = find("Resp", "responsible");
   const actionCol = find("MFG Action", "action");
   const targetCol = find("Target");
+  const defectCodeCol = find("Defect Code", "defect code", "code");
+  const locationCodeCol = find("Location Code", "location code", "loc code", "defect location code");
 
   const w6Col = find("W-6");
   const w5Col = find("W-5");
@@ -212,8 +214,8 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
       mfgStatus: mfgRaw === "OK" ? "OK" : "NG",
       plantStatus: plantRaw === "OK" ? "OK" : "NG",
       mfgAction: getVal(row, actionCol),
-      defectCode: '',
-      defectLocationCode: '',
+      defectCode: getVal(row, defectCodeCol),
+      defectLocationCode: getVal(row, locationCodeCol),
       resp: getVal(row, respCol),
       target: getVal(row, targetCol),
     };
@@ -370,6 +372,8 @@ const FileUploadDialog = ({ nextSNo, onImport }: FileUploadDialogProps) => {
                     <th className="px-2 py-1 text-left">Source</th>
                     <th className="px-2 py-1 text-left">Station</th>
                     <th className="px-2 py-1 text-left">Concern</th>
+                    <th className="px-2 py-1 text-left">Defect Code</th>
+                    <th className="px-2 py-1 text-left">Loc Code</th>
                     <th className="px-2 py-1 text-center">DR</th>
                   </tr>
                 </thead>
@@ -380,6 +384,8 @@ const FileUploadDialog = ({ nextSNo, onImport }: FileUploadDialogProps) => {
                       <td className="px-2 py-1">{entry.source}</td>
                       <td className="px-2 py-1">{entry.operationStation}</td>
                       <td className="px-2 py-1 max-w-[200px] truncate">{entry.concern}</td>
+                      <td className="px-2 py-1 font-mono text-[10px]">{entry.defectCode}</td>
+                      <td className="px-2 py-1 font-mono text-[10px]">{entry.defectLocationCode}</td>
                       <td className="px-2 py-1 text-center">{entry.defectRating}</td>
                     </tr>
                   ))}

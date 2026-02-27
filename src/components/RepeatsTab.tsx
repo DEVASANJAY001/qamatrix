@@ -10,6 +10,8 @@ import Dashboard from "@/components/Dashboard";
 import MatrixDashboard from "@/components/MatrixDashboard";
 import QAMatrixTable from "@/components/QAMatrixTable";
 import PairingContainer from "@/components/PairingContainer";
+import ClosedLoopDashboard from "@/components/ClosedLoopDashboard";
+import ClosedLoopDashboardV2 from "@/components/ClosedLoopDashboardV2";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Upload, Plus, AlertTriangle, CheckCircle, X, Search, Filter, FileSpreadsheet, ArrowUpCircle, Link2, Brain, Loader2, ChevronDown, ChevronRight, ListFilter, Download, Play, Calendar } from "lucide-react";
+import { Upload, Plus, AlertTriangle, CheckCircle, X, Search, Filter, FileSpreadsheet, ArrowUpCircle, Link2, Brain, Loader2, ChevronDown, ChevronRight, ListFilter, Download, Play, Calendar, BarChart3, Activity } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import * as XLSX from "xlsx";
 
@@ -40,7 +42,7 @@ interface RepeatsTabProps {
   matched: MatchedRepeat[];
   unmatched: UnmatchedDefect[];
   addedIds: Set<string>;
-  onFileUpload: (entries: DVXEntry[], fileName: string) => void;
+  onFileUpload: (entries: DVXEntry[], fileName: string, mode: "code" | "semantic") => void;
   onAddToQAMatrix: (entry: QAMatrixEntry) => void;
   onClear: () => void;
   onSetAddedIds: (ids: Set<string>) => void;
@@ -66,6 +68,7 @@ const RepeatsTab = ({
   const [lastDefectUpdate, setLastDefectUpdate] = useState<string | null>(null);
   const [lastPairedDate, setLastPairedDate] = useState<string | null>(null);
   const [pairingLoading, setPairingLoading] = useState(false);
+  const [clDashView, setClDashView] = useState<"classic" | "analytics">("classic");
 
   // Fetch last updated dates
   useEffect(() => {
@@ -82,14 +85,14 @@ const RepeatsTab = ({
     fetchDates();
   }, [dvxEntries]);
 
-  const handleStartPairing = async () => {
+  const handleStartPairing = async (mode: "code" | "semantic") => {
     setPairingLoading(true);
     try {
       const { data: finalDefects, error } = await supabase
         .from("final_defect")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
       if (!finalDefects || finalDefects.length === 0) {
         toast({ title: "No defect data", description: "Upload defect data first in the Defect Data page.", variant: "destructive" });
@@ -98,13 +101,14 @@ const RepeatsTab = ({
       }
 
       // Convert final_defect rows to DVXEntry format for the matching engine
-      const entries: DVXEntry[] = finalDefects.map((d, idx) => ({
+      const entries: DVXEntry[] = finalDefects.map((d: any, idx: number) => ({
         date: new Date(d.created_at).toLocaleDateString(),
+        locationCode: d.defect_location_code || "",
         locationDetails: d.defect_location_code || "",
         defectCode: d.defect_code || "",
         defectDescription: d.defect_description_details?.split(" ").slice(0, 5).join(" ") || "",
         defectDescriptionDetails: d.defect_description_details || "",
-        gravity: "",
+        gravity: d.gravity || "",
         quantity: 1,
         source: d.source || "",
         responsible: "",
@@ -113,7 +117,7 @@ const RepeatsTab = ({
       }));
 
       setLastPairedDate(new Date().toISOString());
-      onFileUpload(entries, `Final Defect Data (${entries.length} records)`);
+      onFileUpload(entries, `Final Defect Data (${entries.length} records)`, mode);
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     } finally {
@@ -156,7 +160,7 @@ const RepeatsTab = ({
       const workbook = XLSX.read(data, { type: "array" });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const entries = parseDVXSheet(sheet);
-      onFileUpload(entries, file.name);
+      onFileUpload(entries, file.name, "semantic");
     };
     reader.readAsArrayBuffer(file);
   };
@@ -173,7 +177,7 @@ const RepeatsTab = ({
         setLinkError("No valid defect rows found. Make sure this is a DVX/Repeat Issues report.");
       } else {
         const name = isGoogleSheetsUrl(linkUrl) ? "Google Sheets" : linkUrl.split("/").pop() || "Link";
-        onFileUpload(entries, name);
+        onFileUpload(entries, name, "semantic");
         setLinkUrl("");
       }
     } catch (err: any) {
@@ -255,14 +259,40 @@ const RepeatsTab = ({
 
   // Get matched QA entries for the table
   const matchedSNos = useMemo(() => new Set(matched.map(m => m.qaSNo)), [matched]);
+  // matchedQAData still used by Dashboard + export button below
   const matchedQAData = useMemo(() => qaData.filter(q => matchedSNos.has(q.sNo)), [qaData, matchedSNos]);
 
-  // Filtered matched data
+  // Build full display dataset: all 191 concerns, matched ones pinned at top
+  // with plant forced to NG and reoccurrence count added for display.
+  const displayAllData = useMemo(() => {
+    // Matched concerns: add DVX repeat count to recurrence, force plantStatus=NG
+    const matchedRows = qaData
+      .filter(d => matchedSNos.has(d.sNo))
+      .map(entry => {
+        const m = matched.find(m => m.qaSNo === entry.sNo);
+        const addedCount = m?.repeatCount || 0;
+        return {
+          ...entry,
+          recurrence: entry.recurrence + addedCount,
+          plantStatus: "NG" as const,   // reoccurrence detected → plant NG
+        };
+      })
+      .sort((a, b) => {
+        const aCount = matched.find(m => m.qaSNo === a.sNo)?.repeatCount || 0;
+        const bCount = matched.find(m => m.qaSNo === b.sNo)?.repeatCount || 0;
+        return bCount - aCount; // highest repeat count first
+      });
+    // Remaining concerns (no matched defects)
+    const otherRows = qaData.filter(d => !matchedSNos.has(d.sNo));
+    return [...matchedRows, ...otherRows];
+  }, [qaData, matched, matchedSNos]);
+
+  // Filtered display data
   const sources = useMemo(() => [...new Set(qaData.map(d => d.source))].sort(), [qaData]);
   const designations = useMemo(() => [...new Set(qaData.map(d => d.designation.toUpperCase()))].sort(), [qaData]);
 
-  const filteredMatchedData = useMemo(() => {
-    let result = matchedQAData;
+  const filteredDisplayData = useMemo(() => {
+    let result = displayAllData;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(d => d.concern.toLowerCase().includes(term) || d.operationStation.toLowerCase().includes(term) || d.sNo.toString().includes(term));
@@ -273,7 +303,7 @@ const RepeatsTab = ({
     if (statusFilter === "NG") result = result.filter(d => d.workstationStatus === "NG" || d.mfgStatus === "NG" || d.plantStatus === "NG");
     if (statusFilter === "OK") result = result.filter(d => d.workstationStatus === "OK" && d.mfgStatus === "OK" && d.plantStatus === "OK");
     return result;
-  }, [matchedQAData, searchTerm, sourceFilter, designationFilter, ratingFilter, statusFilter]);
+  }, [displayAllData, searchTerm, sourceFilter, designationFilter, ratingFilter, statusFilter]);
 
   const hasActiveFilters = sourceFilter || designationFilter || statusFilter || ratingFilter || searchTerm;
   const clearAllFilters = () => { setSearchTerm(""); setSourceFilter(""); setDesignationFilter(""); setStatusFilter(""); setRatingFilter(""); };
@@ -324,6 +354,25 @@ const RepeatsTab = ({
       next.has(key) ? next.delete(key) : next.add(key);
       return next;
     });
+  };
+
+  const exportUnpaired = () => {
+    const rows = activeUnmatched.map(item => ({
+      "Defect Code": item.dvxEntry.defectCode,
+      "Location Code": item.dvxEntry.locationCode,
+      "Location Details": item.dvxEntry.locationDetails,
+      "Description": item.dvxEntry.defectDescription,
+      "Description Details": item.dvxEntry.defectDescriptionDetails,
+      "Gravity": item.dvxEntry.gravity,
+      "Quantity": item.dvxEntry.quantity,
+      "Source": item.dvxEntry.source,
+      "Responsible": item.dvxEntry.responsible,
+      "Date": item.dvxEntry.date,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Not Paired");
+    XLSX.writeFile(wb, "not-paired-defects.xlsx");
   };
 
   const exportUniqueDefects = () => {
@@ -380,14 +429,29 @@ const RepeatsTab = ({
           <div className="flex items-center gap-2">
             <Button
               size="sm"
+              variant="outline"
               className="gap-1.5"
-              onClick={handleStartPairing}
+              onClick={() => handleStartPairing("code")}
               disabled={pairingLoading || isAIMatching}
             >
               {pairingLoading ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Loading Defects...</>
+                <><Loader2 className="w-4 h-4 animate-spin" />Loading...</>
               ) : (
-                <><Play className="w-4 h-4" />Start Pairing</>
+                <><Play className="w-4 h-4" />Pair with Code</>
+              )}
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleStartPairing("semantic")}
+              disabled={pairingLoading || isAIMatching}
+            >
+              {pairingLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Loading...</>
+              ) : isAIMatching ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />AI Matching...</>
+              ) : (
+                <><Brain className="w-4 h-4" />Pair with AI (Semantic)</>
               )}
             </Button>
             {fileName && (
@@ -399,7 +463,7 @@ const RepeatsTab = ({
         </div>
 
         <p className="text-xs text-muted-foreground mb-4">
-          Click <strong>Start Pairing</strong> to fetch defect data and match it with QA Matrix concerns using AI. Or upload a file manually below.
+          Use <strong>Pair with Code</strong> to match defects by Defect Code + Location Code, or <strong>Pair with AI</strong> for semantic matching. You can also upload a file manually below.
         </p>
 
         {/* Mode toggle */}
@@ -474,44 +538,6 @@ const RepeatsTab = ({
 
       {dvxEntries.length > 0 && !isAIMatching && (
         <>
-          {(() => {
-            const totalDefects = dvxEntries.length;
-            const matchedDefects = matched.reduce((a, m) => a + m.dvxEntries.length, 0);
-            const notMatchedDefects = totalDefects - matchedDefects;
-            const matchedPct = totalDefects > 0 ? ((matchedDefects / totalDefects) * 100).toFixed(1) : "0";
-            const notMatchedPct = totalDefects > 0 ? ((notMatchedDefects / totalDefects) * 100).toFixed(1) : "0";
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="dashboard-card flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-primary/15">
-                    <Upload className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold font-mono">{totalDefects}</p>
-                    <p className="text-xs text-muted-foreground">Total Defects</p>
-                  </div>
-                </div>
-                <div className="dashboard-card flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-success/15">
-                    <CheckCircle className="w-5 h-5 text-success" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold font-mono">{matchedDefects} <span className="text-sm font-semibold text-success">({matchedPct}%)</span></p>
-                    <p className="text-xs text-muted-foreground">Matched to QA Matrix</p>
-                  </div>
-                </div>
-                <div className="dashboard-card flex items-center gap-3">
-                  <div className="p-2.5 rounded-lg bg-warning/15">
-                    <AlertTriangle className="w-5 h-5 text-warning" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold font-mono">{notMatchedDefects} <span className="text-sm font-semibold text-warning">({notMatchedPct}%)</span></p>
-                    <p className="text-xs text-muted-foreground">Not Matched</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
 
 
           {/* Unique Defects Summary */}
@@ -582,11 +608,10 @@ const RepeatsTab = ({
                             <td className="px-3 py-2 max-w-[220px] truncate font-medium" title={group.defectDescription}>{group.defectDescription}</td>
                             <td className="px-3 py-2 max-w-[220px] truncate text-muted-foreground" title={group.defectDescriptionDetails}>{group.defectDescriptionDetails}</td>
                             <td className="px-3 py-2 text-center">
-                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                group.gravity === "A" ? "bg-destructive/15 text-destructive" :
+                              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${group.gravity === "A" ? "bg-destructive/15 text-destructive" :
                                 group.gravity === "B" ? "bg-warning/15 text-warning" :
-                                "bg-muted text-muted-foreground"
-                              }`}>
+                                  "bg-muted text-muted-foreground"
+                                }`}>
                                 {group.gravity || "—"}
                               </span>
                             </td>
@@ -612,6 +637,43 @@ const RepeatsTab = ({
             )}
           </div>
 
+          {/* Dashboard View Toggle */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+              <button
+                onClick={() => setClDashView("classic")}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${clDashView === "classic" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <Activity className="w-3.5 h-3.5" />
+                Classic View
+              </button>
+              <button
+                onClick={() => setClDashView("analytics")}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${clDashView === "analytics" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                Analytics View
+              </button>
+            </div>
+          </div>
+
+          {/* Closed Loop Dashboard */}
+          {clDashView === "classic" ? (
+            <ClosedLoopDashboard
+              qaData={qaData}
+              matched={matched}
+              unmatched={activeUnmatched}
+              onOpenPairDialog={openAddDialog}
+            />
+          ) : (
+            <ClosedLoopDashboardV2
+              qaData={qaData}
+              matched={matched}
+              unmatched={activeUnmatched}
+              onOpenPairDialog={openAddDialog}
+            />
+          )}
+
           {/* Pairing Container - Feature 2 */}
           <PairingContainer
             matched={matched}
@@ -622,13 +684,8 @@ const RepeatsTab = ({
             onManualPair={onManualPair}
           />
 
-          {/* Dashboard for matched concerns */}
           {matchedQAData.length > 0 && (
             <>
-              <Dashboard data={matchedQAData} onFilterByCategory={(type, value) => {
-                if (type === "designation") setDesignationFilter(value);
-                else if (type === "source") setSourceFilter(value);
-              }} />
 
               {/* Action buttons bar */}
               <div className="flex items-center gap-2 flex-wrap">
@@ -685,17 +742,22 @@ const RepeatsTab = ({
                   </select>
                 </div>
                 {hasActiveFilters && (
-                  <p className="text-xs text-muted-foreground">Showing {filteredMatchedData.length} of {matchedQAData.length} matched concerns</p>
+                  <p className="text-xs text-muted-foreground">Showing {filteredDisplayData.length} of {displayAllData.length} concerns ({matchedSNos.size} with reported defects)</p>
                 )}
               </div>
 
-              {/* Matched QA Matrix Table */}
+              {/* Full QA Matrix Table — matched concerns at top with NG plant */}
               <div>
-                <h2 className="section-header mb-3">Matched Concerns — QA Matrix Details</h2>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="section-header">QA Matrix — All Concerns</h2>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-500/15 text-orange-400">
+                    {matchedSNos.size} reoccurred ↑ pinned to top · plant forced NG
+                  </span>
+                </div>
                 <QAMatrixTable
-                  data={filteredMatchedData}
+                  data={filteredDisplayData}
                   filter={null}
-                  onClearFilter={() => {}}
+                  onClearFilter={() => { }}
                   onWeeklyUpdate={onWeeklyUpdate}
                   onScoreUpdate={onScoreUpdate}
                   onFieldUpdate={onFieldUpdate}
@@ -711,7 +773,16 @@ const RepeatsTab = ({
               <div className="px-4 py-3 bg-warning/5 border-b border-warning/20 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-warning" />
                 <h3 className="text-sm font-bold">Not Paired Concerns</h3>
-                <span className="ml-auto text-xs text-muted-foreground">{activeUnmatched.length} defects not matched</span>
+                <span className="text-xs text-muted-foreground ml-2">{activeUnmatched.length} defects not matched</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto gap-1.5 text-xs h-7 border-warning/40 hover:border-warning/70"
+                  onClick={exportUnpaired}
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export
+                </Button>
               </div>
               <div className="overflow-auto" style={{ maxHeight: 400 }}>
                 <table className="w-full text-xs">
@@ -735,11 +806,10 @@ const RepeatsTab = ({
                         <td className="px-3 py-2 max-w-[180px] truncate" title={item.dvxEntry.defectDescription}>{item.dvxEntry.defectDescription}</td>
                         <td className="px-3 py-2 max-w-[200px] truncate" title={item.dvxEntry.defectDescriptionDetails}>{item.dvxEntry.defectDescriptionDetails}</td>
                         <td className="px-3 py-2 text-center">
-                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            item.dvxEntry.gravity === "A" ? "bg-destructive/15 text-destructive" :
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${item.dvxEntry.gravity === "A" ? "bg-destructive/15 text-destructive" :
                             item.dvxEntry.gravity === "B" ? "bg-warning/15 text-warning" :
-                            "bg-muted text-muted-foreground"
-                          }`}>
+                              "bg-muted text-muted-foreground"
+                            }`}>
                             {item.dvxEntry.gravity || "-"}
                           </span>
                         </td>
@@ -797,18 +867,16 @@ const RepeatsTab = ({
             <button
               type="button"
               onClick={() => setPairMode("existing")}
-              className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all ${
-                pairMode === "existing" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all ${pairMode === "existing" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               Pair to Existing Concern
             </button>
             <button
               type="button"
               onClick={() => setPairMode("new")}
-              className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all ${
-                pairMode === "new" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-              }`}
+              className={`flex-1 px-4 py-2 text-xs font-semibold rounded-md transition-all ${pairMode === "new" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                }`}
             >
               Create New Concern
             </button>

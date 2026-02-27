@@ -1,5 +1,6 @@
 export interface DVXEntry {
   date: string;
+  locationCode: string;
   locationDetails: string;
   defectCode: string;
   defectDescription: string;
