@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +29,12 @@ const AddConcernDialog = ({ nextSNo, onAdd }: AddConcernDialogProps) => {
   const [concern, setConcern] = useState("");
   const [defectRating, setDefectRating] = useState<1 | 3 | 5>(1);
   const [resp, setResp] = useState("");
+  const [teamLeader, setTeamLeader] = useState("");
   const [action, setAction] = useState("");
   const [target, setTarget] = useState("");
+  const [defectCode, setDefectCode] = useState("");
+  const [locationCode, setLocationCode] = useState("");
+  const [repairTime, setRepairTime] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,20 +51,33 @@ const AddConcernDialog = ({ nextSNo, onAdd }: AddConcernDialogProps) => {
       weeklyRecurrence: [0, 0, 0, 0, 0, 0],
       recurrenceCountPlusDefect: defectRating,
       trim: { T10: n, T20: n, T30: n, T40: n, T50: n, T60: n, T70: n, T80: n, T90: n, T100: n, TPQG: n },
-      chassis: { C10: n, C20: n, C30: n, C40: n, C45: n, P10: n, P20: n, P30: n, C50: n, C60: n, C70: n, RSub: n, TS: n, C80: n, CPQG: n },
-      final: { F10: n, F20: n, F30: n, F40: n, F50: n, F60: n, F70: n, F80: n, F90: n, F100: n, FPQG: n, ResidualTorque: n },
+      chassis: { C10: n, C20: n, C30: n, C40: n, C45: n, C50: n, C60: n, C70: n, C80: n, P10: n, P20: n, P30: n, R10: n, PRESS: n, PQG: n },
+      final: { F10: n, F20: n, F30: n, F40: n, F50: n, F60: n, F70: n, F80: n, F90: n, F100: n, F110: n, FPQG: n, TLAudit: n, TorqueAudit: n },
       qControl: { freqControl_1_1: n, visualControl_1_2: n, periodicAudit_1_3: n, humanControl_1_4: n, saeAlert_3_1: n, freqMeasure_3_2: n, manualTool_3_3: n, humanTracking_3_4: n, autoControl_5_1: n, impossibility_5_2: n, saeProhibition_5_3: n },
       qControlDetail: { CVT: n, SHOWER: n, DynamicUB: n, CC4: n },
-      controlRating: { MFG: 0, Quality: 1, Plant: 1 },
-      guaranteedQuality: { Workstation: n, MFG: n, Plant: n },
+      controlRating: { Workstation: n, Zone: n, Shop: n, Plant: n },
+      recordedDefect: { workstation: n, zone: n, shop: n, customer: n },
+      guaranteedQuality: { Workstation: n, Zone: n, Shop: n, Plant: n },
+      outsideProcess: { Static: n, WheelAlignment: n, HLAssembly: n, DMCCABS: n, CC4: n, CertLine: n },
       workstationStatus: "OK",
       mfgStatus: "NG",
       plantStatus: "OK",
       mfgAction: action,
-      defectCode: '',
-      defectLocationCode: '',
+      defectCode,
+      defectLocationCode: locationCode,
       resp,
+      teamLeader: teamLeader || resp,
       target,
+      detectionFlags: {
+        repairTime,
+        dvmPQG: '',
+        dvrDVT: '',
+        productAuditSCA: '',
+        warranty: '',
+        reoccurrence: '',
+      },
+      implementationDate: '',
+      auditDateName: '',
     };
 
     onAdd(recalculateStatuses(entry));
@@ -81,9 +99,12 @@ const AddConcernDialog = ({ nextSNo, onAdd }: AddConcernDialogProps) => {
           Add Concern
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add New Concern</DialogTitle>
+          <DialogDescription>
+            Enter details to add a new concern to the QA Matrix.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
           <div className="grid grid-cols-2 gap-3">
@@ -125,13 +146,31 @@ const AddConcernDialog = ({ nextSNo, onAdd }: AddConcernDialogProps) => {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="resp">Responsible</Label>
-              <Input id="resp" placeholder="Person name" value={resp} onChange={(e) => setResp(e.target.value)} />
+              <Label htmlFor="resp">Resp. MFG TL</Label>
+              <Input id="resp" placeholder="Responsible TL" value={resp} onChange={(e) => setResp(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="target">Target</Label>
-              <Input id="target" placeholder="e.g. WK12" value={target} onChange={(e) => setTarget(e.target.value)} />
+              <Label htmlFor="teamLeader">Team Leader</Label>
+              <Input id="teamLeader" placeholder="Team Leader" value={teamLeader} onChange={(e) => setTeamLeader(e.target.value)} />
             </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="defectCode">Defect Code</Label>
+              <Input id="defectCode" placeholder="Code" value={defectCode} onChange={(e) => setDefectCode(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="locationCode">Location</Label>
+              <Input id="locationCode" placeholder="Location" value={locationCode} onChange={(e) => setLocationCode(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="repairTime">Repair Time</Label>
+              <Input id="repairTime" placeholder="mins" value={repairTime} onChange={(e) => setRepairTime(e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="target">Target</Label>
+            <Input id="target" placeholder="e.g. WK12" value={target} onChange={(e) => setTarget(e.target.value)} />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

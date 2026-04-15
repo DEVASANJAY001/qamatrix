@@ -1,8 +1,9 @@
 import { QAMatrixEntry } from "@/types/qaMatrix";
 import StatusBadge from "./StatusBadge";
-import { ChevronDown, ChevronUp, X, Trash2, Pencil, Check } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronUp, X, Trash2, Pencil, Check, Factory, Layers } from "lucide-react";
+import React, { useState, useRef, useLayoutEffect } from "react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 
 interface QAMatrixTableProps {
   data: QAMatrixEntry[];
@@ -12,56 +13,74 @@ interface QAMatrixTableProps {
   onScoreUpdate?: (sNo: number, section: "trim" | "chassis" | "final" | "qControl" | "qControlDetail", key: string, value: number | null) => void;
   onFieldUpdate?: (sNo: number, field: string, value: string) => void;
   onDeleteEntry?: (sNo: number) => void;
+  onRatingUpdate?: (sNo: number, section: "controlRating" | "recordedDefect" | "guaranteedQuality", key: string, value: any) => void;
+  readOnly?: boolean;
 }
 
 const weekLabels = ["W-6", "W-5", "W-4", "W-3", "W-2", "W-1"];
 const trimKeys = ["T10", "T20", "T30", "T40", "T50", "T60", "T70", "T80", "T90", "T100", "TPQG"] as const;
-const chassisKeys = ["C10", "C20", "C30", "C40", "C45", "P10", "P20", "P30", "C50", "C60", "C70", "RSub", "TS", "C80", "CPQG"] as const;
-const finalKeysDisplay = ["F10", "F20", "F30", "F40", "F50", "F60", "F70", "F80", "F90", "F100", "FPQG"] as const;
+const chassisKeys = ["C10", "C20", "C30", "C40", "C45", "C50", "C60", "C70", "C80", "P10", "P20", "P30", "R10", "PRESS", "PQG"] as const;
+const finalKeysDisplay = ["F10", "F20", "F30", "F40", "F50", "F60", "F70", "F80", "F90", "F100", "F110", "FPQG"] as const;
 
-const qControlLabels = [
-  { key: "freqControl_1_1" as const, label: "1.1", short: "Freq Ctrl", title: "Frequency Control" },
-  { key: "visualControl_1_2" as const, label: "1.2", short: "Visual Ctrl", title: "Visual Control" },
-  { key: "periodicAudit_1_3" as const, label: "1.3", short: "Periodic Audit", title: "Periodic audit Process monitoring" },
-  { key: "humanControl_1_4" as const, label: "1.4", short: "Human Ctrl", title: "100% Human Control without tracking" },
-  { key: "saeAlert_3_1" as const, label: "3.1", short: "SAE Alert", title: "SAE (Error Proofing) alert" },
-  { key: "freqMeasure_3_2" as const, label: "3.2", short: "Freq Measure", title: "Frequency control (Measurements)" },
-  { key: "manualTool_3_3" as const, label: "3.3", short: "Manual Tool", title: "100% Manual control in the line with tool" },
-  { key: "humanTracking_3_4" as const, label: "3.4", short: "Human Track", title: "100% human control with tracking" },
-  { key: "autoControl_5_1" as const, label: "5.1", short: "Auto Ctrl", title: "100% automatic control" },
-  { key: "impossibility_5_2" as const, label: "5.2", short: "Impossibility", title: "Impossibility of assembly or subsequent machining" },
-  { key: "saeProhibition_5_3" as const, label: "5.3", short: "SAE Prohib", title: "SAE (Error proofing) Prohibition" },
+const outsideProcessKeys = [
+  { key: "TLAudit" as const, label: "Team Leader Audit", section: "final" },
+  { key: "TorqueAudit" as const, label: "Torque Audit", section: "final" },
+  { key: "Static" as const, label: "Static", section: "outside" },
+  { key: "WheelAlignment" as const, label: "Wheel Alignment", section: "outside" },
+  { key: "HLAssembly" as const, label: "HL Aiming/ ABS", section: "outside" },
+  { key: "DMCCABS" as const, label: "Dynamic/ UB", section: "outside" },
+  { key: "CC4" as const, label: "CC4", section: "outside" },
+  { key: "CertLine" as const, label: "Cert Line", section: "outside" },
 ];
 
-const qControlDetailKeys = [
-  { key: "CVT" as const, label: "CVT" },
-  { key: "SHOWER" as const, label: "SHOWER" },
-  { key: "DynamicUB" as const, label: "Dynamic/ UB" },
-  { key: "CC4" as const, label: "CC4" },
+const detectionKeys = [
+  { key: "dvmPQG" as const, label: "DVM/PQG (Y/N)" },
+  { key: "dvrDVT" as const, label: "DVR/DVT (Y/N)" },
+  { key: "productAuditSCA" as const, label: "Product Audit SCA (Y/N)" },
+  { key: "warranty" as const, label: "WARRANTY" },
 ];
 
-const ScoreInput = ({ value, onChange, defectRating }: { value: number | null; onChange: (v: number | null) => void; defectRating: number }) => (
+
+const ScoreInput = ({ value, onChange, defectRating, type, readOnly }: { value: number | null; onChange: (v: number | null) => void; defectRating: number; type: 'trim' | 'chassis' | 'final' | 'outside' | 'impl'; readOnly?: boolean }) => (
   <input
     type="number"
     min={0}
     max={99}
     value={value ?? ""}
+    readOnly={readOnly}
     onChange={(e) => {
+      if (readOnly) return;
       const raw = e.target.value;
       onChange(raw === "" ? null : Math.max(0, parseInt(raw) || 0));
     }}
     onClick={(e) => e.stopPropagation()}
-    className={`w-full text-center font-mono text-xs py-1 rounded border-0 focus:ring-1 focus:ring-primary outline-none ${value !== null && value >= defectRating ? "text-emerald-600 font-semibold bg-emerald-500/5" :
-      value !== null ? "text-foreground bg-transparent" : "bg-transparent text-muted-foreground/30"
-      }`}
-    style={{ minWidth: 28 }}
+    className={`w-full h-full text-center font-bold text-[9px] border-0 focus:ring-0 outline-none data-row hit-${type} ${value !== null && value >= defectRating ? "text-primary bg-primary/10" : "bg-transparent"} ${readOnly ? "cursor-default pointer-events-none" : ""}`}
+    style={{ minWidth: 28, padding: '2px 0' }}
   />
 );
 
-const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpdate, onFieldUpdate, onDeleteEntry }: QAMatrixTableProps) => {
+const makeYNCell = (val: string | undefined) => {
+  if (!val) return <td className="data-row"></td>;
+  return (
+    <td className="data-row" style={{ color: val === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold', fontSize: '10px' }}>
+      {val}
+    </td>
+  );
+};
+
+const makeERBadge = (source: string) => {
+  if (!source) return null;
+  const isER4 = source.toUpperCase().includes("ER4") || source.toUpperCase() === "ER4";
+  const cls = isER4 ? 'er-badge-er4' : 'er-badge-er3';
+  return <span className={`er-badge ${cls}`}>{source}</span>;
+};
+
+
+const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpdate, onFieldUpdate, onDeleteEntry, onRatingUpdate, readOnly }: QAMatrixTableProps) => {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [editingRow, setEditingRow] = useState<number | null>(null);
   const [editFields, setEditFields] = useState<Record<string, string>>({});
+  const tableRef = useRef<HTMLTableElement>(null);
 
   const filteredData = filter
     ? data.filter((d) => {
@@ -75,6 +94,77 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
       return true;
     })
     : data;
+
+  // Dynamically calculate sticky column left offsets and header row top offsets
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const recalc = () => {
+      // Find a regular data row (not expanded) to measure column widths
+      const rows = table.querySelectorAll('tbody > tr');
+      let measureRow: Element | null = null;
+      for (const row of Array.from(rows)) {
+        if (row.querySelector('.sqam-sticky-col-0')) {
+          measureRow = row;
+          break;
+        }
+      }
+      if (!measureRow) return;
+
+      // Calculate cumulative left offsets for sticky columns 0-12
+      const cells = Array.from(measureRow.children) as HTMLElement[];
+      const leftMap = new Map<number, number>();
+      let cumLeft = 0;
+
+      for (const cell of cells) {
+        const cls = Array.from(cell.classList).find(c => /^sqam-sticky-col-\d+$/.test(c));
+        if (cls) {
+          const idx = parseInt(cls.replace('sqam-sticky-col-', ''));
+          leftMap.set(idx, cumLeft);
+          cumLeft += cell.getBoundingClientRect().width;
+        } else if (leftMap.size > 0) {
+          break; // No more sticky columns in this row
+        }
+      }
+
+      // Apply calculated left offsets to ALL matching sticky elements across the table
+      leftMap.forEach((left, idx) => {
+        table.querySelectorAll(`.sqam-sticky-col-${idx}`).forEach(el => {
+          const htmlEl = el as HTMLElement;
+          htmlEl.style.left = `${Math.round(left)}px`;
+          // Ensure intersection cells have highest z-index
+          if (htmlEl.tagName === 'TH') {
+            htmlEl.style.zIndex = '100';
+          }
+        });
+      });
+
+      // Dynamically calculate header row top offsets - apply to TH instead of TR
+      const headerRows = Array.from(table.querySelectorAll('thead > tr')) as HTMLElement[];
+      let cumTop = 0;
+      headerRows.forEach(row => {
+        const rowHeight = row.getBoundingClientRect().height;
+        Array.from(row.children).forEach(cell => {
+          const htmlCell = cell as HTMLElement;
+          htmlCell.style.position = 'sticky';
+          htmlCell.style.top = `${Math.round(cumTop)}px`;
+          // If not a sticky col, set standard header z-index
+          if (!Array.from(htmlCell.classList).some(c => c.startsWith('sqam-sticky-col-'))) {
+            htmlCell.style.zIndex = '40';
+          }
+        });
+        cumTop += rowHeight;
+      });
+    };
+
+    // Run initial calculation
+    recalc();
+
+    // Recalculate on window resize
+    window.addEventListener('resize', recalc);
+    return () => window.removeEventListener('resize', recalc);
+  }, [filteredData, expandedRow]);
 
   return (
     <TooltipProvider>
@@ -90,163 +180,211 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
           </div>
         )}
 
-        <div className="overflow-auto border border-border rounded-lg bg-card" style={{ maxHeight: "calc(100vh - 120px)" }}>
-          <table className="w-full text-xs border-collapse">
-            <thead className="sticky top-0 z-20">
-              <tr className="bg-muted border-b border-border">
-                <th rowSpan={2} className="sticky left-0 z-30 bg-muted px-2 py-2 text-left text-[10px] font-bold min-w-[40px] border-r border-border/40">#</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[50px]">Src</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[55px]">Stn</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[60px]">Area</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[200px]">Concern</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[70px]">Defect Code</th>
-                <th rowSpan={2} className="px-2 py-2 text-left text-[10px] font-bold min-w-[70px]">Loc Code</th>
-                <th rowSpan={2} className="px-2 py-2 text-center text-[10px] font-bold min-w-[30px]">DR</th>
-                <th colSpan={6} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-amber-400/60 bg-amber-50 text-amber-700">RECURRENCE</th>
-                <th rowSpan={2} className="px-2 py-2 text-center text-[10px] font-bold min-w-[40px]">RC+DR</th>
-                <th colSpan={11} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-sky-400/60 bg-sky-50 text-sky-700">TRIM</th>
-                <th colSpan={15} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-emerald-400/60 bg-emerald-50 text-emerald-700">CHASSIS</th>
-                <th colSpan={11} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-violet-400/60 bg-violet-50 text-violet-700">FINAL</th>
-                <th rowSpan={2} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-rose-400/60 bg-rose-50 text-rose-700 min-w-[45px]" title="Residual Torque">Res. Torque</th>
-                {qControlLabels.map((q, i) => (
-                  <th key={q.key} className={`px-1 py-1.5 text-center text-[10px] font-bold bg-orange-50 text-orange-700 min-w-[30px] ${i === 0 ? "border-l-2 border-orange-400/60" : "border-l border-border/20"}`}>{q.label}</th>
-                ))}
-                <th colSpan={4} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-teal-400/60 bg-teal-50 text-teal-700">Q' CONTROL</th>
-                <th colSpan={3} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-primary/40 bg-muted text-primary">CONTROL RATING</th>
-                <th colSpan={3} className="px-1 py-1.5 text-center text-[10px] font-bold border-l-2 border-primary/40 bg-muted text-primary">GUARANTEED QUALITY LEVEL</th>
-                <th rowSpan={2} className="px-1 py-2 min-w-[60px] text-[10px] font-bold">Actions</th>
+        <div className="table-wrapper hidden md:block">
+          <table ref={tableRef} id="sqamTable" className="sqam-body">
+            <thead>
+              {/* Row 1: Top level sections */}
+              <tr>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-0" style={{ minWidth: 30 }}>S.no</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-1" style={{ minWidth: 36 }}>ER</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-2" style={{ minWidth: 42 }}>Station No.</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-3" style={{ minWidth: 55 }}>Zone/Team</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-4" style={{ minWidth: 55 }}>Team Leader</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-5" style={{ minWidth: 200, textAlign: 'left' }}>Failure Mode</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-6" style={{ minWidth: 32 }}>Repair Time</th>
+
+                {/* Detection date +24H */}
+                <th colSpan={6} className="hdr-main-24h sqam-sticky-col sqam-sticky-col-7">
+                  Detection date + 24H<br />
+                  <small>Quality Plant ENG'g — Customer Protection Engineer [Dhakshna]</small>
+                </th>
+
+                {/* Detection date +48H */}
+                <th colSpan={38} className="hdr-main-48h">
+                  Detection date + 48H<br />
+                  <small>MFG SUPERVISOR [David]</small>
+                </th>
+
+                {/* Outside Process Area */}
+                <th colSpan={8} className="hdr-outside">Outside Process Area</th>
+
+                {/* Last Check Implementation */}
+                <th colSpan={2} className="hdr-impl">Last Check Implementation</th>
+
+                {/* New sections from screenshot */}
+                <th colSpan={4} className="hdr-label" style={{ background: '#92D050', color: 'black' }}>Control Rating</th>
+                <th colSpan={4} className="hdr-label" style={{ background: '#92D050', color: 'black' }}>Recorded Defect</th>
+                <th colSpan={4} className="hdr-label" style={{ background: '#92D050', color: 'black' }}>Guaranteed level of quality</th>
+
+                <th rowSpan={3} className="hdr-label" style={{ minWidth: 60 }}>Actions</th>
               </tr>
-              <tr className="bg-muted border-b border-border">
-                {weekLabels.map(w => (
-                  <th key={w} className="px-1 py-1 text-center text-[9px] font-semibold min-w-[32px] border-l border-border/30 bg-amber-50">{w}</th>
+
+              {/* Row 2: Sub-sections */}
+              <tr>
+                {/* Detection cols */}
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-7">DVM/PQG<br />(Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-8">DVR/DVT<br />(Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-9">Product Audit SCA (Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-10">WARRANTY</th>
+                <th rowSpan={2} className="hdr-def sqam-sticky-col sqam-sticky-col-11" style={{ background: '#FF0000', color: 'white' }}>Defect<br />Rating<br />(1/3/5)</th>
+                <th rowSpan={2} className="hdr-label sqam-sticky-col sqam-sticky-col-12">Reoccurrence<br />Broken<br />Clean Point</th>
+
+                {/* Station Area Headers */}
+                <th colSpan={11} className="hdr-trim focus:ring-0">TRIM</th>
+                <th colSpan={15} className="hdr-chassis">CHASSIS</th>
+                <th colSpan={12} className="hdr-final">FINAL</th>
+
+                {/* Outside cols */}
+                {outsideProcessKeys.map(k => (
+                  <th key={k.key} rowSpan={2} className="hdr-outside">{k.label}</th>
                 ))}
-                {trimKeys.map(k => (
-                  <th key={k} className="px-1 py-1 text-center text-[9px] font-semibold min-w-[30px] border-l border-border">{k}</th>
-                ))}
-                {chassisKeys.map(k => (
-                  <th key={k} className="px-1 py-1 text-center text-[9px] font-semibold min-w-[30px] border-l border-border">{k}</th>
-                ))}
-                {finalKeysDisplay.map(k => (
-                  <th key={k} className="px-1 py-1 text-center text-[9px] font-semibold min-w-[30px] border-l border-border">{k}</th>
-                ))}
-                {qControlLabels.map(q => (
-                  <th key={q.key} className="px-1 py-1 text-[8px] font-semibold min-w-[30px] border-l border-border bg-orange-50 cursor-pointer" style={{ writingMode: "vertical-rl", textOrientation: "mixed", whiteSpace: "nowrap", height: 80 }}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="select-none">{q.short}</span>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-[200px] text-xs">
-                        <p className="font-bold">{q.label}</p>
-                        <p>{q.title}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </th>
-                ))}
-                {qControlDetailKeys.map(q => (
-                  <th key={q.key} className="px-1 py-1 text-center text-[9px] font-semibold min-w-[30px] border-l border-border">{q.label}</th>
-                ))}
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[35px] border-l border-primary/30">MFG</th>
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[35px]">Qty</th>
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[35px]">Plnt</th>
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[40px] border-l border-primary/30">WS</th>
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[40px]">MFG</th>
-                <th className="px-1 py-1 text-center text-[9px] font-semibold min-w-[40px]">Plnt</th>
+
+                {/* Impl cols */}
+                <th rowSpan={2} className="hdr-impl">Impl. Date</th>
+                <th rowSpan={2} className="hdr-impl">Audit Date & Name</th>
+
+                {/* Control Rating sub-headers */}
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Workstation</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Zone (Supervisor)</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Shop (GA, paintshop ...)</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Plant</th>
+
+                {/* Recorded Defect sub-headers */}
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Escaping Workstation <br /> 1M</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Escaping Zone <br /> 3M</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Escaping Shop <br /> 3M</th>
+                <th className="hdr-label" style={{ background: '#D9D9D9', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>CUSTOMER <br /> 6M</th>
+
+                {/* Guaranteed Quality sub-headers */}
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Workstation</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Zone (Neighbor Check, PQG...)</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Shop (GA, paintshop ...)</th>
+                <th className="hdr-label" style={{ background: '#E2EFDA', color: 'black', fontSize: '8px', writingMode: 'vertical-rl' }}>Plant</th>
+              </tr>
+
+              {/* Row 3: Station labels */}
+              <tr>
+                {trimKeys.map(k => <th key={k} className="sub-trim">{k}</th>)}
+                {chassisKeys.map(k => <th key={k} className="sub-chassis">{k}</th>)}
+                {finalKeysDisplay.map(k => <th key={k} className="sub-final">{k}</th>)}
               </tr>
             </thead>
+
             <tbody>
               {filteredData.map((entry) => (
-                <>
+                <React.Fragment key={entry.sNo}>
                   <tr
-                    key={entry.sNo}
-                    className="border-t border-border hover:bg-muted/30 transition-colors cursor-pointer"
+                    className={`border-t border-border hover:bg-muted/30 transition-colors cursor-pointer ${entry.recurrence > 0 ? 'bg-amber-500/5 hover:bg-amber-500/10' : ''
+                      }`}
                     onClick={() => setExpandedRow(expandedRow === entry.sNo ? null : entry.sNo)}
                   >
-                    <td className="sticky left-0 z-10 bg-card px-2 py-1.5 font-mono text-muted-foreground text-center border-r border-border">{entry.sNo}</td>
-                    <td className="px-2 py-1.5">{entry.source}</td>
-                    <td className="px-2 py-1.5 font-mono text-primary">{entry.operationStation}</td>
-                    <td className="px-2 py-1.5">{entry.designation}</td>
-                    <td className="px-2 py-1.5 max-w-[220px] truncate" title={entry.concern}>{entry.concern}</td>
-                    <td className="px-2 py-1.5 font-mono text-[10px]">{entry.defectCode}</td>
-                    <td className="px-2 py-1.5 font-mono text-[10px]">{entry.defectLocationCode}</td>
-                    <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={entry.defectRating}
-                        onChange={(e) => {
-                          const newRating = Number(e.target.value) as 1 | 3 | 5;
-                          onFieldUpdate?.(entry.sNo, "defectRating", String(newRating));
-                        }}
-                        className={`w-8 h-6 text-center font-bold text-[10px] rounded-full border-0 cursor-pointer appearance-none focus:ring-1 focus:ring-primary outline-none ${entry.defectRating === 5 ? "bg-destructive/15 text-destructive" :
-                          entry.defectRating === 3 ? "bg-warning/15 text-warning" :
-                            "bg-primary/15 text-primary"
-                          }`}
-                      >
-                        <option value={1}>1</option>
-                        <option value={3}>3</option>
-                        <option value={5}>5</option>
-                      </select>
-                    </td>
-                    {entry.weeklyRecurrence.map((val, i) => (
-                      <td key={`w${i}`} className="px-0.5 py-0.5 border-l border-border bg-amber-50/10" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="number"
-                          min={0}
-                          max={99}
-                          value={val}
-                          onChange={(e) => onWeeklyUpdate(entry.sNo, i, Math.max(0, parseInt(e.target.value) || 0))}
-                          className={`w-full text-center font-mono text-xs py-1 rounded border-0 focus:ring-1 focus:ring-primary outline-none ${val > 0 ? "bg-destructive/10 text-destructive font-bold" : "bg-transparent text-muted-foreground"
-                            }`}
-                        />
-                      </td>
-                    ))}
-                    <td className="px-2 py-1.5 text-center font-bold font-mono">{entry.recurrenceCountPlusDefect}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-0" style={{ fontWeight: 'bold' }}>{entry.sNo}</td>
+                    <td className="data-row col-er sqam-sticky-col sqam-sticky-col-1">{makeERBadge(entry.source)}</td>
+                    <td className="data-row col-stn sqam-sticky-col sqam-sticky-col-2">{entry.operationStation}</td>
+                    <td className="data-row col-zone sqam-sticky-col sqam-sticky-col-3" style={{ color: entry.designation.toLowerCase().includes('trim') ? '#1F4E79' : entry.designation.toLowerCase().includes('chassis') ? '#375623' : entry.designation.toLowerCase().includes('final') ? '#7F3F00' : 'inherit', fontWeight: 'bold' }}>{entry.designation}</td>
+                    <td className="data-row col-tl sqam-sticky-col sqam-sticky-col-4">{entry.teamLeader ?? entry.resp}</td>
+                    <td className="data-row col-fm sqam-sticky-col sqam-sticky-col-5" title={entry.concern}>{entry.concern}</td>
+                    <td className="data-row col-rt sqam-sticky-col sqam-sticky-col-6">{entry.detectionFlags?.repairTime ?? ""}</td>
+
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-7" style={{ color: entry.detectionFlags?.dvmPQG === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvmPQG ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-8" style={{ color: entry.detectionFlags?.dvrDVT === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvrDVT ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-9" style={{ color: entry.detectionFlags?.productAuditSCA === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.productAuditSCA ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-10">{entry.detectionFlags?.warranty ?? ""}</td>
+                    <td className={`data-row sqam-sticky-col sqam-sticky-col-11 ${entry.defectRating === 1 ? 'def-1' : entry.defectRating === 3 ? 'def-3' : 'def-5'}`}>{entry.defectRating}</td>
+                    <td className="data-row col-reoc sqam-sticky-col sqam-sticky-col-12">{entry.detectionFlags?.reoccurrence ?? ""}</td>
+
                     {trimKeys.map(k => (
-                      <td key={k} className="px-0.5 py-0.5 border-l border-border">
-                        <ScoreInput value={entry.trim[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "trim", k, v)} />
+                      <td key={k} className="p-0 border-l border-border">
+                        <ScoreInput readOnly={readOnly} type="trim" value={entry.trim[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "trim", k, v)} />
                       </td>
                     ))}
                     {chassisKeys.map(k => (
-                      <td key={k} className="px-0.5 py-0.5 border-l border-border">
-                        <ScoreInput value={entry.chassis[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "chassis", k, v)} />
+                      <td key={k} className="p-0 border-l border-border">
+                        <ScoreInput readOnly={readOnly} type="chassis" value={entry.chassis[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "chassis", k, v)} />
                       </td>
                     ))}
                     {finalKeysDisplay.map(k => (
-                      <td key={k} className="px-0.5 py-0.5 border-l border-border">
-                        <ScoreInput value={entry.final[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "final", k, v)} />
+                      <td key={k} className="p-0 border-l border-border">
+                        <ScoreInput readOnly={readOnly} type="final" value={entry.final[k]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "final", k, v)} />
                       </td>
                     ))}
-                    <td className="px-0.5 py-0.5 border-l-2 border-rose-400">
-                      <ScoreInput value={entry.final.ResidualTorque} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "final", "ResidualTorque", v)} />
-                    </td>
-                    {qControlLabels.map(q => (
-                      <td key={q.key} className="px-0.5 py-0.5 border-l border-border">
-                        <ScoreInput value={entry.qControl[q.key]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "qControl", q.key, v)} />
+                    {outsideProcessKeys.map(k => (
+                      <td key={k.key} className="p-0 border-l border-border">
+                        <ScoreInput
+                          readOnly={readOnly}
+                          type="outside"
+                          value={k.section === "final" ? entry.final[k.key as keyof typeof entry.final] : entry.outsideProcess?.[k.key as keyof typeof entry.outsideProcess] ?? null}
+                          defectRating={entry.defectRating}
+                          onChange={(v) => k.section === "final" ? onScoreUpdate?.(entry.sNo, "final", k.key, v) : onScoreUpdate?.(entry.sNo, "outsideProcess" as any, k.key, v)}
+                        />
                       </td>
                     ))}
-                    {qControlDetailKeys.map(q => (
-                      <td key={q.key} className="px-0.5 py-0.5 border-l border-border">
-                        <ScoreInput value={entry.qControlDetail[q.key]} defectRating={entry.defectRating} onChange={(v) => onScoreUpdate?.(entry.sNo, "qControlDetail", q.key, v)} />
+                    <td className="data-row col-impl">{entry.implementationDate ?? ""}</td>
+                    <td className="data-row col-impl">{entry.auditDateName ?? ""}</td>
+
+                    {/* Control Rating Data — Editable */}
+                    {(["Workstation", "Zone", "Shop", "Plant"] as const).map(k => (
+                      <td key={`cr-${k}`} className="data-row val-ctrl p-0" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="number" min={0} max={999}
+                          value={entry.controlRating?.[k] ?? ""}
+                          readOnly={readOnly}
+                          onChange={e => !readOnly && onRatingUpdate?.(entry.sNo, "controlRating", k, e.target.value === "" ? null : parseInt(e.target.value) || 0)}
+                          className={`w-full h-full text-center font-semibold text-[9px] border-0 focus:ring-1 focus:ring-green-400 outline-none bg-transparent ${readOnly ? "cursor-default pointer-events-none" : ""}`}
+                          style={{ minWidth: 32, padding: '2px 0' }}
+                        />
                       </td>
                     ))}
-                    <td className="px-2 py-1.5 text-center border-l border-border font-bold font-mono">{entry.controlRating.MFG}</td>
-                    <td className="px-2 py-1.5 text-center font-mono">{entry.controlRating.Quality}</td>
-                    <td className="px-2 py-1.5 text-center font-bold font-mono">{entry.controlRating.Plant}</td>
-                    <td className="px-1 py-1.5 text-center border-l border-primary/30"><StatusBadge status={entry.workstationStatus} /></td>
-                    <td className="px-1 py-1.5 text-center"><StatusBadge status={entry.mfgStatus} /></td>
-                    <td className="px-1 py-1.5 text-center"><StatusBadge status={entry.plantStatus} /></td>
-                    <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+
+                    {/* Recorded Defect Data — Editable */}
+                    {(["workstation", "zone", "shop", "customer"] as const).map(k => (
+                      <td key={`rd-${k}`} className="data-row val-rd p-0" onClick={e => e.stopPropagation()}>
+                        <input
+                          type="number" min={0} max={999}
+                          value={entry.recordedDefect?.[k] ?? ""}
+                          readOnly={readOnly}
+                          onChange={e => !readOnly && onRatingUpdate?.(entry.sNo, "recordedDefect", k, e.target.value === "" ? null : parseInt(e.target.value) || 0)}
+                          className={`w-full h-full text-center font-semibold text-[9px] border-0 focus:ring-1 focus:ring-yellow-400 outline-none bg-transparent ${readOnly ? "cursor-default pointer-events-none" : ""}`}
+                          style={{ minWidth: 32, padding: '2px 0' }}
+                        />
+                      </td>
+                    ))}
+
+                    {/* Guaranteed Quality Data — Editable OK/NG */}
+                    {(["Workstation", "Zone", "Shop", "Plant"] as const).map(k => (
+                      <td key={`gq-${k}`} className="data-row val-gq p-0" onClick={e => e.stopPropagation()}>
+                        <select
+                          value={entry.guaranteedQuality?.[k] ?? "OK"}
+                          disabled={readOnly}
+                          onChange={e => !readOnly && onRatingUpdate?.(entry.sNo, "guaranteedQuality", k, e.target.value)}
+                          className={`w-full h-full text-center font-bold text-[9px] border-0 focus:ring-1 outline-none cursor-pointer ${entry.guaranteedQuality?.[k] === "NG" ? "bg-red-500 text-white" : "bg-green-600 text-white"} ${readOnly ? "cursor-default pointer-events-none appearance-none" : ""}`}
+                          style={{ minWidth: 32, padding: '2px 0' }}
+                        >
+                          <option value="OK">OK</option>
+                          <option value="NG">NG</option>
+                        </select>
+                      </td>
+                    ))}
+
+                    <td className="data-row" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-0.5 justify-center">
-                        {editingRow === entry.sNo ? (
-                          <button onClick={() => { Object.entries(editFields).forEach(([field, value]) => { onFieldUpdate?.(entry.sNo, field, value); }); setEditingRow(null); setEditFields({}); }} className="p-1 rounded hover:bg-primary/10 text-primary" title="Save"><Check className="w-3.5 h-3.5" /></button>
-                        ) : (
-                          <button onClick={() => { setEditingRow(entry.sNo); setEditFields({ source: entry.source, operationStation: entry.operationStation, designation: entry.designation, concern: entry.concern, defectCode: entry.defectCode, defectLocationCode: entry.defectLocationCode, mfgAction: entry.mfgAction, resp: entry.resp, target: entry.target }); }} className="p-1 rounded hover:bg-primary/10 text-muted-foreground" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                        {!readOnly && (
+                          <>
+                            {editingRow === entry.sNo ? (
+                              <button onClick={() => { Object.entries(editFields).forEach(([field, value]) => { onFieldUpdate?.(entry.sNo, field, value); }); setEditingRow(null); setEditFields({}); }} className="p-1 rounded hover:bg-primary/10 text-primary" title="Save"><Check className="w-3.5 h-3.5" /></button>
+                            ) : (
+                              <button onClick={() => { setEditingRow(entry.sNo); setEditFields({ source: entry.source, operationStation: entry.operationStation, designation: entry.designation, teamLeader: entry.teamLeader ?? entry.resp, concern: entry.concern, defectCode: entry.defectCode, defectLocationCode: entry.defectLocationCode, mfgAction: entry.mfgAction, resp: entry.resp, target: entry.target }); }} className="p-1 rounded hover:bg-primary/10 text-muted-foreground" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                            )}
+                            <button onClick={() => { if (confirm(`Delete concern #${entry.sNo}?`)) { onDeleteEntry?.(entry.sNo); } }} className="p-1 rounded hover:bg-destructive/10 text-destructive" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </>
                         )}
-                        <button onClick={() => { if (confirm(`Delete concern #${entry.sNo}?`)) { onDeleteEntry?.(entry.sNo); } }} className="p-1 rounded hover:bg-destructive/10 text-destructive" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                         <button onClick={() => setExpandedRow(expandedRow === entry.sNo ? null : entry.sNo)} className="p-1 rounded hover:bg-muted">
                           {expandedRow === entry.sNo ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
                         </button>
                       </div>
                     </td>
                   </tr>
+
                   {expandedRow === entry.sNo && (
                     <tr key={`exp-${entry.sNo}`} className="bg-muted/20">
                       <td colSpan={100} className="px-4 py-3">
@@ -271,12 +409,22 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground">Team Leader</label>
+                                    <input value={editFields.teamLeader ?? ""} onChange={(e) => setEditFields(f => ({ ...f, teamLeader: e.target.value }))} className="w-full px-2 py-1 text-xs border border-input rounded bg-background" />
+                                  </div>
+                                  <div className="space-y-1">
                                     <label className="text-[10px] text-muted-foreground">Defect Code</label>
                                     <input value={editFields.defectCode ?? ""} onChange={(e) => setEditFields(f => ({ ...f, defectCode: e.target.value }))} className="w-full px-2 py-1 text-xs border border-input rounded bg-background" />
                                   </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
                                   <div className="space-y-1">
                                     <label className="text-[10px] text-muted-foreground">Location Code</label>
                                     <input value={editFields.defectLocationCode ?? ""} onChange={(e) => setEditFields(f => ({ ...f, defectLocationCode: e.target.value }))} className="w-full px-2 py-1 text-xs border border-input rounded bg-background" />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] text-muted-foreground">MFG Action</label>
+                                    <input value={editFields.mfgAction ?? ""} onChange={(e) => setEditFields(f => ({ ...f, mfgAction: e.target.value }))} className="w-full px-2 py-1 text-xs border border-input rounded bg-background" />
                                   </div>
                                 </div>
                               </>
@@ -331,13 +479,118 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile View: Cards */}
+        <div className="md:hidden space-y-4">
+          {filteredData.map((entry) => (
+            <div key={entry.sNo} className={`mobile-card ${entry.recurrence > 0 ? 'bg-amber-500/5 ring-1 ring-amber-500/20' : ''}`}>
+              <div className="mobile-card-header">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black bg-slate-100 px-2 py-0.5 rounded">#{entry.sNo}</span>
+                  {makeERBadge(entry.source)}
+                </div>
+                <div className={`text-[10px] px-2 py-0.5 rounded font-black ${entry.defectRating === 1 ? 'bg-green-100 text-green-700' : entry.defectRating === 3 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                  RATING {entry.defectRating}
+                </div>
+              </div>
+
+              <div className="mobile-card-section">
+                <h4 className="text-sm font-bold leading-tight">{entry.concern}</h4>
+                <div className="flex flex-wrap gap-2 text-[11px] mt-1 text-muted-foreground">
+                  <span className="flex items-center gap-1 font-semibold text-primary">
+                    <Factory className="w-3 h-3" />
+                    {entry.operationStation}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <Layers className="w-3 h-3" />
+                    {entry.designation}
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border/50">
+                <div className="mobile-card-section">
+                  <p className="mobile-card-label">Guaranteed Quality</p>
+                  <div className="flex gap-1 mt-1">
+                    {(['Workstation', 'Zone', 'Shop', 'Plant'] as const).map(k => (
+                      <div key={k} className={`w-6 h-6 rounded flex items-center justify-center text-[8px] font-black text-white ${entry.guaranteedQuality[k] === 'OK' ? 'bg-green-600' : 'bg-red-500'}`}>
+                        {k[0]}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mobile-card-section text-right">
+                  <p className="mobile-card-label">Weekly Repeats</p>
+                  <div className="flex justify-end gap-1 mt-1">
+                    {entry.weeklyRecurrence.slice(-3).map((w, i) => (
+                      <div key={i} className={`w-6 h-6 rounded flex flex-col items-center justify-center text-[8px] ${w > 0 ? 'bg-red-100 text-red-600 font-bold' : 'bg-slate-50 text-slate-400'}`}>
+                        <span>{weekLabels[i + 3]}</span>
+                        <span>{w}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                <div className="flex gap-1">
+                  {entry.detectionFlags?.reoccurrence ? (
+                    <div className="flex items-center gap-1 text-[10px] text-amber-600 font-bold">
+                      <Check className="w-3 h-3" />
+                      Reoccurrence Updated
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2">
+                  {!readOnly && (
+                    <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setEditingRow(entry.sNo)}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground" onClick={() => setExpandedRow(expandedRow === entry.sNo ? null : entry.sNo)}>
+                    {expandedRow === entry.sNo ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </Button>
+                </div>
+              </div>
+
+              {expandedRow === entry.sNo && (
+                <div className="bg-muted/30 -mx-4 -mb-4 p-4 mt-2 rounded-b-xl space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="mobile-card-label">Team Leader</p>
+                      <p className="font-medium">{entry.teamLeader || entry.resp || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="mobile-card-label">Source</p>
+                      <p className="font-medium">{entry.source}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mobile-card-label">MFG Action</p>
+                    <p className="mt-1 leading-relaxed">{entry.mfgAction || "No action recorded"}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="mobile-card-label">Respondent</p>
+                      <p className="font-medium">{entry.resp}</p>
+                    </div>
+                    <div>
+                      <p className="mobile-card-label">Target Date</p>
+                      <p className="font-medium">{entry.target || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </TooltipProvider>
+    </TooltipProvider >
   );
 };
 

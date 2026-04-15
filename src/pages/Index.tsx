@@ -15,7 +15,7 @@ import { exportToCSV } from "@/utils/csvExport";
 import { exportToXLSX } from "@/utils/xlsxExport";
 import { aiMatchDefects } from "@/utils/aiMatch";
 import { useQAMatrixDB } from "@/hooks/useQAMatrixDB";
-import { Shield, Search, Filter, X, Download, FileSpreadsheet, RotateCcw, Repeat, Undo2, Database, Loader2, Trash2, Lock, AlertTriangle } from "lucide-react";
+import { Shield, Search, Filter, X, Download, FileSpreadsheet, RotateCcw, Repeat, Undo2, Database, Loader2, Trash2, Lock, AlertTriangle, History as HistoryIcon, Save, BarChart3, ChevronDown } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,10 @@ import {
 } from "@/components/ui/dialog";
 
 const Index = () => {
-  const { data, loading: dbLoading, updateData: dbUpdateData, fetchData: refreshFromDB, saveMultiple, deleteEntry: dbDeleteEntry, deleteAll: dbDeleteAll } = useQAMatrixDB();
+  const {
+    data, loading: dbLoading, updateData: dbUpdateData, fetchData: refreshFromDB,
+    saveMultiple, deleteEntry: dbDeleteEntry, deleteAll: dbDeleteAll, saveSnapshot
+  } = useQAMatrixDB();
   const [activeTab, setActiveTab] = useState<"matrix" | "repeats">("matrix");
   const [dashboardView, setDashboardView] = useState<"summary" | "matrix-dashboard">("summary");
   const [filter, setFilter] = useState<{ rating?: 1 | 3 | 5; level?: string; status?: "OK" | "NG" } | null>(null);
@@ -93,6 +96,14 @@ const Index = () => {
   const handleDeleteEntry = (sNo: number) => {
     updateData(prev => prev.filter(entry => entry.sNo !== sNo));
     dbDeleteEntry(sNo);
+  };
+
+  const handleRatingUpdate = (sNo: number, section: "controlRating" | "recordedDefect" | "guaranteedQuality", key: string, value: any) => {
+    updateData(prev => prev.map(entry => {
+      if (entry.sNo !== sNo) return entry;
+      const updated = { ...entry, [section]: { ...entry[section], [key]: value } };
+      return updated;
+    }));
   };
 
   const handleDeleteAll = async () => {
@@ -351,39 +362,44 @@ const Index = () => {
     setPreApplySnapshot([...data.map(d => ({ ...d, weeklyRecurrence: [...d.weeklyRecurrence] }))]);
 
     const diffs: DiffEntry[] = [];
-    updateData(prev => {
-      return prev.map(entry => {
-        const m = matched.find(m => m.qaSNo === entry.sNo);
-        if (!m) return entry;
-        const oldW1 = entry.weeklyRecurrence[5];
-        const newW1 = oldW1 + m.repeatCount;
-        const newWeekly = [...entry.weeklyRecurrence];
-        newWeekly[5] = newW1;
-        diffs.push({
-          sNo: entry.sNo,
-          concern: entry.concern,
-          field: "W-1 (Last Week)",
-          before: oldW1,
-          after: newW1,
-        });
-        const updated = recalculateStatuses({ ...entry, weeklyRecurrence: newWeekly });
-        if (entry.workstationStatus !== updated.workstationStatus) {
-          diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "WS Status", before: entry.workstationStatus, after: updated.workstationStatus });
-        }
-        if (entry.mfgStatus !== updated.mfgStatus) {
-          diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "MFG Status", before: entry.mfgStatus, after: updated.mfgStatus });
-        }
-        if (entry.plantStatus !== updated.plantStatus) {
-          diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "Plant Status", before: entry.plantStatus, after: updated.plantStatus });
-        }
-        return updated;
+    const nextData = data.map(entry => {
+      const m = matched.find(m => m.qaSNo === entry.sNo);
+      if (!m) return entry;
+      const oldW1 = entry.weeklyRecurrence[5];
+      const newW1 = oldW1 + m.repeatCount;
+      const newWeekly = [...entry.weeklyRecurrence];
+      newWeekly[5] = newW1;
+      diffs.push({
+        sNo: entry.sNo,
+        concern: entry.concern,
+        field: "W-1 (Last Week)",
+        before: oldW1,
+        after: newW1,
       });
+      const updated = recalculateStatuses({ ...entry, weeklyRecurrence: newWeekly });
+      if (entry.workstationStatus !== updated.workstationStatus) {
+        diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "WS Status", before: entry.workstationStatus, after: updated.workstationStatus });
+      }
+      if (entry.mfgStatus !== updated.mfgStatus) {
+        diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "MFG Status", before: entry.mfgStatus, after: updated.mfgStatus });
+      }
+      if (entry.plantStatus !== updated.plantStatus) {
+        diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "Plant Status", before: entry.plantStatus, after: updated.plantStatus });
+      }
+      return updated;
     });
 
+    updateData(() => nextData);
     setDiffEntries(diffs);
     setIsRepeatApplied(true);
     setShowDiffDialog(true);
-  }, [data, matched]);
+
+    // Feature: Auto-save snapshot of ONLY matched concerns after applying
+    const matchedData = nextData.filter(d => matched.some(m => m.qaSNo === d.sNo));
+    if (matchedData.length > 0) {
+      saveSnapshot(matchedData);
+    }
+  }, [data, matched, updateData, saveSnapshot]);
 
   // Feature 3: Undo apply
   const handleUndoApply = useCallback(() => {
@@ -395,6 +411,8 @@ const Index = () => {
       setShowDiffDialog(false);
     }
   }, [preApplySnapshot]);
+
+  const [showActions, setShowActions] = useState(false);
 
   const filteredData = useMemo(() => {
     let result = data;
@@ -427,89 +445,121 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-20">
-        <div className="max-w-[1800px] mx-auto px-4 py-3 flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Shield className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight">QA Matrix</h1>
-            <p className="text-[11px] text-muted-foreground">Quality Assurance Control & Monitoring System</p>
-          </div>
-          <div className="ml-6 flex items-center gap-1 bg-muted rounded-lg p-0.5">
-            <button
-              onClick={() => setActiveTab("matrix")}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${activeTab === "matrix" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              QA Matrix
-            </button>
-            <button
-              onClick={() => setActiveTab("repeats")}
-              className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${activeTab === "repeats" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
-                }`}
-            >
-              <Repeat className="w-3.5 h-3.5" />
-              Repeats
-            </button>
-          </div>
-          <Link to="/defect-upload" className="ml-2">
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <Database className="w-3.5 h-3.5" />
-              Defect Data
-            </Button>
-          </Link>
-          <div className="ml-auto flex items-center gap-2">
-            {activeTab === "matrix" && (
-              <>
-                <AddConcernDialog nextSNo={data.length + 1} onAdd={handleAddConcern} />
-                <FileUploadDialog nextSNo={data.length + 1} onImport={handleFileImport} />
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => exportToXLSX(filteredData)}>
-                  <FileSpreadsheet className="w-4 h-4" />
-                  Export Excel
-                </Button>
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => exportToCSV(filteredData)}>
-                  <Download className="w-4 h-4" />
-                  Export CSV
-                </Button>
-                {isRepeatApplied && preApplySnapshot && (
-                  <>
-                    <Button size="sm" variant="outline" className="gap-1.5 text-primary" onClick={() => setShowDiffDialog(true)}>
-                      View Changes
-                    </Button>
-                    <Button size="sm" variant="destructive" className="gap-1.5" onClick={handleUndoApply}>
-                      <Undo2 className="w-4 h-4" />
-                      Undo Repeat Update
-                    </Button>
-                  </>
-                )}
-                <Button size="sm" variant="ghost" className="gap-1.5 text-destructive" onClick={() => { refreshFromDB(); setIsRepeatApplied(false); setPreApplySnapshot(null); setDiffEntries([]); }} title="Reload from database">
-                  <RotateCcw className="w-4 h-4" />
-                  Reset
-                </Button>
+      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-40">
+        <div className="max-w-[1800px] mx-auto px-4 py-3">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center justify-between w-full md:w-auto">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Shield className="w-5 h-5 text-primary" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-bold tracking-tight">QA Matrix</h1>
+                  <p className="text-[11px] text-muted-foreground hidden xs:block">Quality Assurance Control & Monitoring System</p>
+                </div>
+              </div>
+
+              <div className="flex md:hidden items-center gap-2">
                 <Button
+                  variant="ghost"
                   size="sm"
-                  variant="destructive"
-                  className="gap-1.5"
-                  onClick={() => { setDeleteAllOpen(true); setDeleteAllPassword(""); setDeleteAllError(""); }}
+                  onClick={() => setShowActions(!showActions)}
+                  className="h-8 w-8 p-0"
                 >
-                  <Trash2 className="w-4 h-4" />
-                  Clear QA Matrix
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showActions ? "rotate-180" : ""}`} />
                 </Button>
-              </>
-            )}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground ml-2">
-              <span className="font-mono">{data.length} concerns</span>
-              <span className="w-1 h-1 rounded-full bg-muted-foreground" />
-              <span className="font-mono text-destructive font-semibold">
-                {data.filter(d => d.plantStatus === "NG").length} Plant NG
-              </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 w-fit order-3 md:order-2 mx-auto md:mx-0">
+              <button
+                onClick={() => setActiveTab("matrix")}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${activeTab === "matrix" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+              >
+                QA Matrix
+              </button>
+              <button
+                onClick={() => setActiveTab("repeats")}
+                className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${activeTab === "repeats" ? "bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+              >
+                <Repeat className="w-3.5 h-3.5" />
+                Repeats
+              </button>
+            </div>
+
+            <div className={`${showActions ? "flex" : "hidden"} md:flex items-center gap-2 flex-wrap sm:flex-nowrap order-4 md:order-3 w-full md:w-auto justify-center`}>
+              <Link to="/defect-upload" className="flex-1 sm:flex-initial">
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 w-full justify-start md:justify-center">
+                  <Database className="w-3.5 h-3.5" />
+                  Upload
+                </Button>
+              </Link>
+              <Link to="/defect-dashboard" className="flex-1 sm:flex-initial">
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 w-full justify-start md:justify-center border-emerald-500/30 hover:bg-emerald-500/5">
+                  <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
+                  Dashboard
+                </Button>
+              </Link>
+              <Link to="/reoccurrence-history" className="flex-1 sm:flex-initial">
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 w-full justify-start md:justify-center border-primary/30 hover:bg-primary/5">
+                  <HistoryIcon className="w-3.5 h-3.5 text-primary" />
+                  History
+                </Button>
+              </Link>
             </div>
           </div>
+
+          {activeTab === "matrix" && (
+            <div className={`${showActions ? "flex" : "hidden"} md:flex items-center gap-1.5 mt-3 pt-3 border-t border-border/50 flex-wrap justify-between`}>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <FileUploadDialog nextSNo={data.length + 1} onImport={handleFileImport} />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 bg-background/50 border-primary/20 hover:bg-primary/5 h-8"
+                  onClick={() => exportToXLSX(filteredData)}
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-primary" />
+                  Export
+                </Button>
+                <AddConcernDialog nextSNo={data.length + 1} onAdd={handleAddConcern} />
+
+                {isRepeatApplied && preApplySnapshot && (
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="gap-1.5 text-primary h-8 px-2" onClick={() => setShowDiffDialog(true)}>
+                      Changes
+                    </Button>
+                    <Button size="sm" variant="destructive" className="gap-1.5 h-8 px-2" onClick={handleUndoApply}>
+                      <Undo2 className="w-3.5 h-3.5" />
+                      Undo
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground" onClick={() => refreshFromDB()} title="Reload from database">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                </Button>
+                <div className="h-4 w-[1px] bg-border mx-1" />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 group text-muted-foreground hover:text-destructive"
+                  onClick={() => { setDeleteAllOpen(true); setDeleteAllPassword(""); setDeleteAllError(""); }}
+                >
+                  <Trash2 className="w-3.5 h-3.5 mr-1" />
+                  <span className="text-[10px] hidden sm:inline">Clear All</span>
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="max-w-[1800px] mx-auto px-4 py-6 space-y-6">
+      <main className="w-full mx-auto px-4 py-6 space-y-6">
         {dbLoading ? (
           <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
             <Loader2 className="w-5 h-5 animate-spin" />
@@ -569,6 +619,7 @@ const Index = () => {
                 onScoreUpdate={handleScoreUpdate}
                 onFieldUpdate={handleFieldUpdate}
                 onDeleteEntry={handleDeleteEntry}
+                onRatingUpdate={handleRatingUpdate}
               />
             </div>
           </>
@@ -595,6 +646,7 @@ const Index = () => {
             onManualPair={handleManualPair}
             isApplied={isRepeatApplied}
             isAIMatching={isAIMatching}
+            onSaveSnapshot={saveSnapshot}
           />
         )}
       </main>
@@ -609,7 +661,7 @@ const Index = () => {
       />
 
       <Footer />
-    </div>
+    </div >
   );
 };
 

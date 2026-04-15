@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQAM - Station Quality Audit Matrix (V2)</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Calibri, Arial, sans-serif; font-size: 10px; background: #f0f0f0; }
+
+  .page-title {
+    background: #1F4E79; color: white; text-align: center;
+    padding: 8px 12px; font-size: 14px; font-weight: bold; letter-spacing: 1px;
+  }
+  .page-subtitle {
+    background: #2E75B6; color: white; text-align: center;
+    padding: 4px; font-size: 11px;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+  }
+
+  table {
+    border-collapse: collapse;
+    white-space: nowrap;
+    width: max-content;
+  }
+
+  th, td {
+    border: 1px solid #999;
+    padding: 2px 4px;
+    text-align: center;
+    vertical-align: middle;
+    font-size: 9px;
+    min-width: 28px;
+  }
+
+  /* ─── Section header rows ─── */
+  .hdr-main-24h {
+    background: #BDD7EE; color: #1F4E79; font-weight: bold; font-size: 10px;
+  }
+  .hdr-main-48h {
+    background: #FFF2CC; color: #7F6000; font-weight: bold; font-size: 10px;
+  }
+  .hdr-section-eng {
+    background: #2E75B6; color: white; font-weight: bold;
+  }
+  .hdr-section-mfg {
+    background: #ED7D31; color: white; font-weight: bold;
+  }
+  .hdr-label {
+    background: #D9D9D9; font-weight: bold;
+  }
+  .hdr-detection {
+    background: #E2EFDA; font-weight: bold;
+  }
+
+  /* ─── Process area headers ─── */
+  .hdr-trim     { background: #1F4E79; color: white; font-weight: bold; }
+  .hdr-chassis  { background: #375623; color: white; font-weight: bold; }
+  .hdr-final    { background: #7F3F00; color: white; font-weight: bold; }
+  .hdr-outside  { background: #595959; color: white; font-weight: bold; }
+  .hdr-impl     { background: #4472C4; color: white; font-weight: bold; }
+
+  /* ─── Station sub-headers ─── */
+  .sub-trim    { background: #D6E4F7; color: #1F4E79; font-weight: bold; }
+  .sub-chassis { background: #D6F0D6; color: #375623; font-weight: bold; }
+  .sub-final   { background: #FFF2CC; color: #7F3F00; font-weight: bold; }
+  .sub-outside { background: #EDEDED; color: #333; font-weight: bold; }
+  .sub-impl    { background: #DAE8FC; color: #333; font-weight: bold; }
+
+  /* ─── Fixed info columns ─── */
+  .col-er    { background: #FFF9C4; min-width: 36px; }
+  .col-stn   { background: #E8F5E9; min-width: 42px; font-weight: bold; }
+  .col-zone  { background: #E3F2FD; min-width: 55px; }
+  .col-tl    { background: #FFF3E0; min-width: 55px; }
+  .col-fm    { background: #FCE4EC; min-width: 200px; text-align: left; white-space: normal; max-width: 260px; }
+  .col-rt    { background: #F3E5F5; min-width: 32px; }
+  .col-dvm   { background: #E0F7FA; min-width: 36px; }
+  .col-def   { background: #FFEBEE; font-weight: bold; min-width: 32px; }
+  .col-reoc  { background: #FFF8E1; min-width: 36px; }
+
+  /* ─── Data cell value coloring ─── */
+  .val-1 { color: #1565C0; }
+  .val-3 { color: #E65100; }
+  .val-5 { color: #B71C1C; font-weight: bold; }
+  .val-y { color: #1B5E20; font-weight: bold; }
+  .val-n { color: #B71C1C; }
+  .val-ok  { background: #C6EFCE; color: #276221; font-weight: bold; }
+  .val-nok { background: #FFC7CE; color: #9C0006; font-weight: bold; }
+
+  /* ─── Data rows ─── */
+  tr:nth-child(even) td.data-row { filter: brightness(0.97); }
+  tr:hover td.data-row { background: #FFFDE7 !important; }
+
+  .row-er4 { }
+  .row-er3 { }
+
+  .er-badge {
+    display: inline-block; border-radius: 3px; padding: 1px 4px;
+    font-weight: bold; font-size: 8px;
+  }
+  .er-badge-er4 { background: #FFA726; color: #4E342E; }
+  .er-badge-er3 { background: #AB47BC; color: white; }
+
+  /* ─── Defect rating colors ─── */
+  .def-1 { background: #C6EFCE; color: #276221; font-weight: bold; }
+  .def-3 { background: #FFEB9C; color: #9C6500; font-weight: bold; }
+  .def-5 { background: #FFC7CE; color: #9C0006; font-weight: bold; }
+
+  /* ─── Station hit cell ─── */
+  .hit-trim    { background: #BDD7EE; color: #1F4E79; font-weight: bold; }
+  .hit-chassis { background: #C6EFCE; color: #375623; font-weight: bold; }
+  .hit-final   { background: #FFE699; color: #7F6000; font-weight: bold; }
+  .hit-outside { background: #EDEDED; color: #333; font-weight: bold; }
+  .hit-impl    { background: #DAE8FC; color: #333; font-weight: bold; }
+
+  /* ─── Sticky headers ─── */
+  .sticky-col { position: sticky; left: 0; z-index: 2; }
+  .sticky-col-1 { left: 0; }
+  .sticky-col-2 { left: 36px; }
+  .sticky-col-3 { left: 78px; }
+
+  thead tr { position: sticky; }
+
+  /* ─── Legend ─── */
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    padding: 6px 12px; background: #fff; border-bottom: 1px solid #ccc;
+    font-size: 9px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .legend-box {
+    width: 14px; height: 14px; border: 1px solid #999; border-radius: 2px;
+  }
+
+  .filter-bar {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 6px 12px; background: #f9f9f9; border-bottom: 1px solid #ddd;
+    font-size: 10px; align-items: center;
+  }
+  .filter-bar label { font-weight: bold; color: #333; }
+  .filter-bar select, .filter-bar input {
+    border: 1px solid #bbb; border-radius: 3px; padding: 2px 6px; font-size: 10px;
+  }
+  .filter-bar button {
+    background: #1F4E79; color: white; border: none; border-radius: 3px;
+    padding: 3px 10px; cursor: pointer; font-size: 10px;
+  }
+  .filter-bar button:hover { background: #2E75B6; }
+
+  .row-count {
+    padding: 3px 12px; font-size: 10px; color: #555; background: #fff;
+    border-bottom: 1px solid #eee;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-title">📋 SQAM — Station Quality Audit Matrix (V2)</div>
+<div class="page-subtitle">Quality Plant ENG'g &amp; MFG SUPERVISOR Tracking | Detection Date +24H / +48H</div>
+
+<!-- Legend -->
+<div class="legend">
+  <strong>Legend:</strong>
+  <span class="legend-item"><span class="legend-box" style="background:#1F4E79"></span> TRIM</span>
+  <span class="legend-item"><span class="legend-box" style="background:#375623"></span> CHASSIS</span>
+  <span class="legend-item"><span class="legend-box" style="background:#7F3F00"></span> FINAL</span>
+  <span class="legend-item"><span class="legend-box" style="background:#C6EFCE;border-color:#276221"></span> Defect=1 (Low)</span>
+  <span class="legend-item"><span class="legend-box" style="background:#FFEB9C;border-color:#9C6500"></span> Defect=3 (Med)</span>
+  <span class="legend-item"><span class="legend-box" style="background:#FFC7CE;border-color:#9C0006"></span> Defect=5 (High)</span>
+  <span class="legend-item"><span class="legend-box" style="background:#C6EFCE;border-color:#276221"></span> OK</span>
+  <span class="legend-item"><span class="legend-box" style="background:#FFC7CE;border-color:#9C0006"></span> NOK</span>
+  <span class="legend-item"><span class="legend-box" style="background:#FFA726"></span> ER4</span>
+  <span class="legend-item"><span class="legend-box" style="background:#AB47BC"></span> ER3</span>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <label>Zone/Team:</label>
+  <select id="filterZone" onchange="applyFilters()">
+    <option value="">All</option>
+    <option>Trim</option><option>Chassis</option><option>Final</option>
+    <option>TRIM</option><option>CHASSIS</option><option>FINAL</option>
+  </select>
+  <label>Team Leader:</label>
+  <select id="filterTL" onchange="applyFilters()">
+    <option value="">All</option>
+    <option>Praveen</option><option>Vinoth</option><option>Mani</option>
+  </select>
+  <label>ER Type:</label>
+  <select id="filterER" onchange="applyFilters()">
+    <option value="">All</option>
+    <option>ER4</option><option>ER3</option><option>None</option>
+  </select>
+  <label>Defect Rating:</label>
+  <select id="filterDef" onchange="applyFilters()">
+    <option value="">All</option>
+    <option>1</option><option>3</option><option>5</option>
+  </select>
+  <label>Search Failure:</label>
+  <input type="text" id="filterSearch" placeholder="keyword..." oninput="applyFilters()" style="min-width:120px">
+  <button onclick="resetFilters()">Reset</button>
+</div>
+<div class="row-count" id="rowCount">Loading...</div>
+
+<div class="table-wrapper">
+<table id="sqamTable">
+<thead>
+<!-- Row 1: Top level sections -->
+<tr>
+  <th rowspan="5" class="hdr-label sticky-col sticky-col-1" style="min-width:36px">ER</th>
+  <th rowspan="5" class="hdr-label sticky-col sticky-col-2" style="min-width:42px">Station No.</th>
+  <th rowspan="5" class="hdr-label sticky-col sticky-col-3" style="min-width:55px">Zone/Team</th>
+  <th rowspan="5" class="hdr-label" style="min-width:55px">Team Leader</th>
+  <th rowspan="5" class="hdr-label" style="min-width:200px; text-align:left">Failure Mode</th>
+  <th rowspan="5" class="hdr-label" style="min-width:36px">Repair Time</th>
+  <!-- Detection date +24H -->
+  <th colspan="8" class="hdr-main-24h">Detection date + 24H<br><small>Quality Plant ENG'g — Customer Protection Engineer [Dhakshna]</small></th>
+  <!-- Detection date +48H: Process area -->
+  <th colspan="38" class="hdr-main-48h">Detection date + 48H<br><small>MFG SUPERVISOR [David]</small></th>
+  <!-- Outside process area -->
+  <th colspan="8" class="hdr-outside">Outside Process Area</th>
+  <!-- Last check -->
+  <th colspan="2" class="hdr-impl">Last Check Implementation</th>
+</tr>
+<!-- Row 2: Sub-sections -->
+<tr>
+  <!-- Detection cols -->
+  <th rowspan="4" class="hdr-detection">DVM/PQG<br>(Y/N)</th>
+  <th rowspan="4" class="hdr-detection">DVR/DVT<br>(Y/N)</th>
+  <th rowspan="4" class="hdr-detection">Product Audit SCA (Y/N)</th>
+  <th rowspan="4" class="hdr-detection">WARRANTY</th>
+  <th rowspan="4" class="hdr-def" style="background:#FF0000;color:white;font-weight:bold;">Defect<br>Rating<br>(1/3/5)</th>
+  <th rowspan="4" class="hdr-label">Reoccurrence<br>Broken<br>Clean Point</th>
+  <!-- Protection in process: +48H area -->
+  <th colspan="11" class="hdr-trim">TRIM</th>
+  <th colspan="15" class="hdr-chassis">CHASSIS</th>
+  <th colspan="12" class="hdr-final">FINAL</th>
+  <!-- Outside: rowspan 3 -->
+  <th rowspan="3" class="hdr-outside">Team Leader Audit</th>
+  <th rowspan="3" class="hdr-outside">Torque Audit</th>
+  <th rowspan="3" class="hdr-outside">Static</th>
+  <th rowspan="3" class="hdr-outside">Wheel Alignment</th>
+  <th rowspan="3" class="hdr-outside">HL Aiming/<br>ABS</th>
+  <th rowspan="3" class="hdr-outside">Dynamic/<br>UB</th>
+  <th rowspan="3" class="hdr-outside">CC4</th>
+  <th rowspan="3" class="hdr-outside">Cert Line</th>
+  <!-- Last check -->
+  <th rowspan="3" class="hdr-impl">Impl. Date</th>
+  <th rowspan="3" class="hdr-impl">Audit Date &amp; Name</th>
+</tr>
+<!-- Row 3: Station labels -->
+<tr>
+  <!-- TRIM -->
+  <th class="sub-trim">T10</th><th class="sub-trim">T20</th><th class="sub-trim">T30</th>
+  <th class="sub-trim">T40</th><th class="sub-trim">T50</th><th class="sub-trim">T60</th>
+  <th class="sub-trim">T70</th><th class="sub-trim">T80</th><th class="sub-trim">T90</th>
+  <th class="sub-trim">T100</th><th class="sub-trim">TPQG</th>
+  <!-- CHASSIS -->
+  <th class="sub-chassis">C10</th><th class="sub-chassis">C20</th><th class="sub-chassis">C30</th>
+  <th class="sub-chassis">C40</th><th class="sub-chassis">C45</th><th class="sub-chassis">C50</th>
+  <th class="sub-chassis">C60</th><th class="sub-chassis">C70</th><th class="sub-chassis">C80</th>
+  <th class="sub-chassis">P10</th><th class="sub-chassis">P20</th><th class="sub-chassis">P30</th>
+  <th class="sub-chassis">R10</th><th class="sub-chassis">PRESS</th><th class="sub-chassis">PQG</th>
+  <!-- FINAL -->
+  <th class="sub-final">F10</th><th class="sub-final">F20</th><th class="sub-final">F30</th>
+  <th class="sub-final">F40</th><th class="sub-final">F50</th><th class="sub-final">F60</th>
+  <th class="sub-final">F70</th><th class="sub-final">F80</th><th class="sub-final">F90</th>
+  <th class="sub-final">F100</th><th class="sub-final">F110</th><th class="sub-final">FPQG</th>
+</tr>
+</thead>
+<tbody id="tableBody">
+</tbody>
+</table>
+</div>
+
+<script>
+// ── Raw data extracted from Excel ──
+const rawData = [
+  // col keys: 2=ER, 3=Station, 4=Zone, 5=TL, 6=FailureMode, 7=RepairTime,
+  //           9=DVM, 10=DVR, 11=ProdAudit, 12=WARRANTY, 13=DefectRating, 14=Reoccurrence
+  // Cols 17-27 = TRIM stations T10-TPQG
+  // Cols 28-42 = CHASSIS stations C10-PQG
+  // Cols 43-54 = FINAL stations F10-FPQG
+  // Cols 55-62 = Outside process area
+  // Cols 64-65 = Last check implementation
+{"3":"C80","4":"Chassis","5":"Mani","6":"FR RH Brake locked - Brake switch assy failure","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"1","21":"1","27":"3","60":"1"},
+{"3":"F30","4":"Final","5":"Vinoth","6":"EC Battery negative terminal insecure","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","45":"1","51":"1","54":"1","57":"1"},
+{"3":"C50","4":"Chassis","5":"Mani","6":"RR coil spring spec error","7":"2","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","33":"1","60":"1"},
+{"3":"T80","4":"Trim","5":"Praveen","6":"ST RHF Seat belt bottom mounting incorrectly fitted","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","24":"1","25":"1","27":"1","60":"1"},
+{"3":"C10","4":"Chassis","5":"Mani","6":"E/C Fuel inlet & outlet not lock","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","28":"1","54":"1","57":"1"},
+{"3":"T50","4":"Final","5":"Vinoth","6":"FR wiper not working","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","21":"1","27":"1","54":"1","58":"1"},
+{"3":"F20","4":"Final","5":"Vinoth","6":"ST 2nd Row seat not lock [Pull check and mark process added]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","44":"1","54":"1","57":"1"},
+{"3":"F80","4":"Final","5":"Vinoth","6":"ST Front wiper blade Noise","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","48":"1","54":"1","57":"1"},
+{"3":"F50","4":"Final","5":"Vinoth","6":"ST VIN label non conformity - Windshield vin plate incorrectly printed","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","47":"1","54":"1","57":"1"},
+{"3":"C50","4":"Chassis","5":"Mani","6":"Spindle bolt missing","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"5","57":"1"},
+{"3":"T20","4":"Trim","5":"Praveen","6":"ST A/C Heat knob malfunction - mode adjuster malfunction","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","18":"1","27":"1","54":"1","57":"1"},
+{"3":"F60","4":"Final","5":"Vinoth","6":"Hand brake boot damage","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","48":"1","54":"1","57":"1"},
+{"3":"F110","4":"Final","5":"Vinoth","6":"Paint poor appearance [All over body]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","54":"1","57":"1"},
+{"3":"F10","4":"Final","5":"Vinoth","6":"Wheel Hub cap Wrong Part Fitted","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","43":"5","54":"1","57":"1"},
+{"3":"C80","4":"Chassis","5":"Mani","6":"Head lamp adjuster not working","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","36":"1","58":"1"},
+{"3":"T30","4":"Trim","5":"Praveen","6":"ST LHR Power window noise","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","19":"1","54":"1","57":"1","60":"1"},
+{"3":"F90","4":"Final","5":"Vinoth","6":"Wheel cover spec error","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","51":"1","57":"1"},
+{"3":"C40","4":"Chassis","5":"Mani","6":"U/B Fuel tank damage [Traceability Part]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"5","60":"1"},
+{"3":"P20","4":"Chassis","5":"Mani","6":"Stab link rod spec error","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","38":"1","46":"1","54":"1","57":"1"},
+{"3":"P20","4":"Chassis","5":"Mani","6":"Drive shaft seal damage","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","38":"1","60":"1"},
+{"3":"C60","4":"Chassis","5":"Mani","6":"Hub nut loose [Bearing noise]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"5","60":"1"},
+{"3":"F20","4":"Final","5":"Vinoth","6":"2nd Seat spec error","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","44":"3","54":"1","57":"1"},
+{"3":"C80","4":"Chassis","5":"Mani","6":"Bumper colour mismatch","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","36":"1","57":"1"},
+{"3":"F40","4":"Final","5":"Vinoth","6":"FR W/S and T/G water entry","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","46":"1","57":"1"},
+{"3":"T60","4":"Trim","5":"Praveen","6":"EC Main harness wrong routing","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","22":"1","27":"1","57":"1"},
+{"3":"T10","4":"Trim","5":"Praveen","6":"Fuel Door - Spring Missing","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","17":"1","20":"1","27":"1","57":"1"},
+{"3":"T40","4":"Trim","5":"Praveen","6":"AC cut off - evaporator harness pinch with HVAC earth hardware","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","20":"1","27":"1","57":"1"},
+{"3":"F30","4":"Trim","5":"Praveen","6":"ST RHR Grab handle mounting screw cap not locked - insecure","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","45":"1","54":"1","57":"1"},
+{"3":"F10","4":"Trim","5":"Praveen","6":"Centre facia part incorrect fitment","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","43":"1","44":"1","54":"1","58":"1"},
+{"3":"T10","4":"Trim","5":"Praveen","6":"FR LH Door Seal Deformation","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","17":"1","27":"1","57":"1"},
+{"3":"T10","4":"Trim","5":"Praveen","6":"Door bump stopper miss","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","17":"1","27":"1","57":"1"},
+{"3":"F50","4":"Final","5":"Vinoth","6":"ST Tailgate transfer trim snap miss - ST Tailgate trim screw insecure","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","47":"1","54":"1","60":"1"},
+{"3":"C80","4":"Final","5":"Vinoth","6":"AC gas QTY low - AC low cooling","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","50":"5","60":"1"},
+{"3":"C80","4":"Chassis","5":"Mani","6":"EC head lamp wire not snap - HLLD cable chromate not lock","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","36":"1","54":"1","57":"1"},
+{"3":"T20","4":"Trim","5":"Praveen","6":"AC no cooling [Terminal cut]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","18":"1","27":"1","60":"1"},
+{"3":"F30","4":"Final","5":"Vinoth","6":"Seat bolt miss","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","46":"5","57":"1"},
+{"3":"F30","4":"Final","5":"Vinoth","6":"Center Lock malfunction [Function check - PQG]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","45":"1","54":"1","57":"1"},
+{"3":"P10","4":"Chassis","5":"Mani","6":"Transmission oil leak","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","32":"5","60":"1"},
+{"3":"C60","4":"Chassis","5":"Mani","6":"LCA bolt spinning","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"5","60":"1"},
+{"3":"T40","4":"Trim","5":"Praveen","6":"A/C cut off - Evaporator harness pinch with HVAC earth hardware","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","20":"1","27":"1","60":"1"},
+{"3":"T70","4":"Trim","5":"Praveen","6":"Door glass water leak [Roller process addition]","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","23":"1","58":"1"},
+{"3":"T60","4":"Trim","5":"Praveen","6":"Airbag indication continuous glow","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","22":"1","23":"1","54":"1","61":"5"},
+{"3":"T20","4":"Trim","5":"Praveen","6":"AC Blower Failure","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","18":"1","27":"1","61":"5"},
+{"3":"T20","4":"Trim","5":"Praveen","6":"A/C BLOWER FACE & LEG MODE ON TIME BLOWER ABNORMAL NOISE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","18":"1","27":"1","60":"1"},
+{"3":"T70","4":"Trim","5":"Praveen","6":"Power Window not fully up","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"3","14":"N","23":"1","54":"1","57":"1","60":"1"},
+{"3":"C80","4":"Chassis","5":"Mani","6":"Head lamp not working - Connector partial connected","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"1","14":"N","36":"1","57":"1"},
+{"3":"C50","4":"Chassis","5":"Mani","6":"Transmission bolt miss","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"5","60":"1"},
+// ─── ER4 rows ───
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET-BRAKE BOOSTER ON DASH PANEL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"1","20":"1","27":"3","56":"1","60":"1"},
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET - BRAKE PEDAL BOX ASSY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"5","21":"1","56":"1","57":"1"},
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET - ACC. PEDAL ASSY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"1","21":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T10","4":"TRIM","5":"Praveen","6":"SET - AIRBAG-ECU","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","17":"1","25":"1","27":"3","56":"1","61":"5"},
+{"2":"ER4","3":"T50","4":"TRIM","5":"Praveen","6":"SET-FR DOOR LATCH_LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","25":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"SET-FR DOOR LATCH_RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"1","25":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T60","4":"TRIM","5":"Praveen","6":"SET-RR DOOR LATCH_RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","22":"1","25":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"SET-RR DOOR LATCH_LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"1","25":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T50","4":"TRIM","5":"Praveen","6":"SET-ABS UNIT WITH BRACKET","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"5","56":"1","57":"1"},
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET-ABS UNIT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"1","21":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T50E","4":"TRIM","5":"Praveen","6":"SET - BRAKE PIPE SECONDARY TO ABS UNIT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","23":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T50E","4":"TRIM","5":"Praveen","6":"SET - BRAKE PIPE PRIMARY TO ABS UNIT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","23":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T50E","4":"TRIM","5":"Praveen","6":"SET- PRIMARY_SECONDARY PIPE TO BRAKE BOOSTER","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","23":"1","27":"3","56":"1","57":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"RC_SET-FRT_SEAT_BELT_ASSY_WO_PRE_TENS_LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"5","56":"1","60":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"RC_SET-FRT_SEAT_BELT_ASSY_WO_PRE_TENS_RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"5","56":"1","60":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"SET - RR SEAT BELT ASSY_LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"5","56":"1","60":"1"},
+{"2":"ER4","3":"T70","4":"TRIM","5":"Praveen","6":"SET - RR SEAT BELT ASSY_RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"5","56":"1","60":"1"},
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET - HOOD LATCH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"5","56":"1","60":"1"},
+{"2":"ER4","3":"T30","4":"TRIM","5":"Praveen","6":"SET - WIPER MOTOR LINKAGE ASSEMBLY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","19":"5","56":"1","60":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-TAIL GATE STRIKER ADJUSTMENT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","50":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-FR DOOR STRIKER ADJUSTMENT RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","50":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-FR DOOR STRIKER ADJUSTMENT LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","50":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-RR DOOR STRIKER ADJUSTMENT RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","50":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-RR DOOR STRIKER ADJUSTMENT LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","50":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"FIX-FRONT STRUT ASSY TO BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"1","48":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"P30/C60","4":"FINAL","5":"Vinoth","6":"SET-FR HUB NUT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"5","37":"1","56":"1","60":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-HAND BRAKE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"CONNECT THE PKB CABLE WITH MASTER CABLE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"1","46":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SETTING LH RR SEAT BUCKLE ON BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","44":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SETTING RH RR SEAT BUCKLE ON BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","44":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-FR SEAT LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","48":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-FR SEAT RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","45":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET-WIPER BLADE ASSY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","48":"1","52":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"F30","4":"FINAL","5":"Vinoth","6":"SET-STEERING WHEEL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","45":"3","46":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-RR SEAT CUSHION LH TIGHTENING","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","48":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-RR SEAT CUSHION RH TIGHTENING","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"3","45":"1","56":"1","57":"1"},
+{"2":"ER4","3":"F10","4":"FINAL","5":"Vinoth","6":"SET-PASS AIRBAG","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","43":"1","44":"1","45":"3","56":"1","61":"5"},
+{"2":"ER4","3":"C60","4":"FINAL","5":"Vinoth","6":"SET-FR TYRE ASSY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"5","48":"1","56":"1","60":"1"},
+{"2":"ER4","3":"C60","4":"FINAL","5":"Vinoth","6":"SET-RR TYRE ASSY","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"5","48":"1","56":"1","60":"1"},
+{"2":"ER4","3":"T80","4":"TRIM","5":"Praveen","6":"RC-FIX RR LH SEAT BELT IN QTR UPR TRIM","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","24":"5","25":"1","56":"1","60":"1"},
+{"2":"ER4","3":"T80","4":"TRIM","5":"Praveen","6":"RC-FIX RR LH SEAT BELT IN QTR LWR TRIM","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","24":"5","25":"1","56":"1","60":"1"},
+{"2":"ER4","3":"T80","4":"TRIM","5":"Praveen","6":"RC-FIX RR RH SEAT BELT IN QTR UPR TRIM","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","24":"5","25":"1","56":"1","60":"1"},
+{"2":"ER4","3":"T80","4":"TRIM","5":"Praveen","6":"RC-FIX RR RH SEAT BELT IN QTR LWR TRIM","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","24":"5","25":"1","56":"1","60":"1"},
+{"2":"ER4","3":"F60","4":"FINAL","5":"Vinoth","6":"SET -TAILGATE LATCH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","22":"1","24":"1","54":"3","56":"1","57":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - RR BRAKE TUBE LH TO ABS","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","32":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - RR BRAKE TUBE RH TO ABS","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","32":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - FR BRAKE TUBE LH TO ABS","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","32":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - FR BRAKE TUBE RH TO ABS","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","32":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C10","4":"CHASSIS","5":"Mani","6":"SET-BATTERY P5 BRACKET TO BATTERY RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","31":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C10","4":"CHASSIS","5":"Mani","6":"SET-BATTERY P5 BRACKET TO BATTERY LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","31":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C10","4":"CHASSIS","5":"Mani","6":"HV BATTERY TO BIW RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","31":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C10","4":"CHASSIS","5":"Mani","6":"HV BATTERY TO BIW LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","31":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C10","4":"CHASSIS","5":"Mani","6":"REAR LH SHOCK TO BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"5","56":"1","60":"1"},
+{"2":"ER4","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - ANTIROLL BAR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"5","56":"1","57":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT BRAKE FLEX HOSE TO CALIPER LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","33":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT BRAKE FLEX HOSE TO CALIPER RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","33":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"CORNER MODULE TO LCA LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"5","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"CORNER MODULE TO LCA RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"5","56":"1","60":"1"},
+{"2":"ER4","3":"P10","4":"CHASSIS","5":"Mani","6":"CORNER MODULE TO STEERING ROD LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P10","4":"CHASSIS","5":"Mani","6":"CORNER MODULE TO STEERING ROD RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"LCA TO CRADLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"LCA TO CRADLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"BRAKE CALIPER TO KNUCKLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","38":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P20","4":"CHASSIS","5":"Mani","6":"BRAKE CALIPER TO KNUCKLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","38":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - STABILIZER LINK ROD TO RTB","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","38":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"SET- TORQUE ROD TO CRADDLE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-FRNT UNIT TO BODY(FRONT)","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-FRNT UNIT TO BODY(REAR)","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT SUSPENSION STRUT TO KNUCKLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT SUSPENSION STRUT TO KNUCKLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT FLEX HOSE TO BRAKE TUBE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","33":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"FRONT FLEX HOSE TO BRAKE TUBE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","33":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"STABILIZER LINK ROD TO SUSPENSION STRUT LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","39":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C30","4":"CHASSIS","5":"Mani","6":"STABILIZER LINK ROD TO SUSPENSION STRUT RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","39":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"R10","4":"CHASSIS","5":"Mani","6":"REAR BRAKE FLEX HOSE TO AXLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","40":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"R10","4":"CHASSIS","5":"Mani","6":"REAR BRAKE FLEX HOSE TO AXLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","40":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET-RR AXLE UNIT TO BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET-RR AXLE UNIT TO RR SHOCK ABSORBER LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET-RR AXLE UNIT TO RR SHOCK ABSORBER RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"5","56":"1","60":"1"},
+{"2":"ER4","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-RTB MOUNTING BRACKET LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","34":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-RTB MOUNTING BRACKET RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","34":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"PRESS","4":"CHASSIS","5":"Mani","6":"FRONT DISC TO KNUCKLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","36":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"PRESS","4":"CHASSIS","5":"Mani","6":"FRONT DISC TO KNUCKLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","36":"1","42":"3","56":"1","60":"1"},
+{"2":"ER4","3":"T50","4":"TRIM","5":"Praveen","6":"EARTHING ON CABIN","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"1","27":"3","56":"1","61":"5"},
+{"2":"ER4","3":"C40","4":"CHASSIS","5":"Mani","6":"SET-RR HUB NUT RH/LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"5","56":"1","60":"1"},
+{"2":"ER4","3":"R10","4":"CHASSIS","5":"Mani","6":"SET - REAR BRAKE TUBE ON BRAKE PLATE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"1","42":"3","56":"1","60":"1"},
+// ─── ER3 rows ───
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"SET - EARTHING ON BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"EARTHING ON CABIN","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"SET - EARTHING ON FR RH A PILLAR PANEL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"SET - EARTHING ON CCB","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"T70","4":"TRIM","5":"Praveen","6":"SET - STEERING COLUMN","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","23":"1","60":"1"},
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"AC PIPE LINE WITH HVAC","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"T50","4":"TRIM","5":"Praveen","6":"SET -WIPER MOTOR ASSEMBLY TO COWL PANEL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","57":"1","60":"1"},
+{"2":"ER3","3":"T20","4":"TRIM","5":"Praveen","6":"SET - FR GSAT SENSOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","18":"1","60":"1"},
+{"2":"ER3","3":"F80","4":"FINAL","5":"Vinoth","6":"FIX-STRG LWR JOINT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","50":"1","52":"1","57":"1"},
+{"2":"ER3","3":"F80","4":"FINAL","5":"Vinoth","6":"CONN- BATTERY NEGATIVE TERMINAL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","50":"1","57":"1"},
+{"2":"ER3","3":"F80","4":"FINAL","5":"Vinoth","6":"CONN- BATTERY POSITIVE TERMINAL","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","50":"1","57":"1"},
+{"2":"ER3","3":"F80","4":"FINAL","5":"Vinoth","6":"SET-BECB SENSOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","50":"1","60":"1"},
+{"2":"ER3","3":"F80","4":"FINAL","5":"Vinoth","6":"SET-BFT SENSOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","50":"1","60":"1"},
+{"2":"ER3","3":"C10","4":"CHASSIS","5":"Mani","6":"S/A - VACCUM PUMP TO VACCUM PUMP LWR BRACKET","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","60":"1"},
+{"2":"ER3","3":"C10","4":"CHASSIS","5":"Mani","6":"S/A - VACCUM PUMP LWR BRKT TO VACCUM PUMP UPPR BRACKET","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","60":"1"},
+{"2":"ER3","3":"C10","4":"CHASSIS","5":"Mani","6":"SET - LH BODY SUPPORT BRKT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","28":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - PDU TO CROSS FRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - DC DC CONVERTER TO CROSS FRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - SUCTION LINE TO COMPRESSOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - BATTERY POSITIVE CABLE TO DC DC CONVERTER","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - eCOMPRESSOR ON LH TRANSMISSION MOUNT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP (CHASSIS) TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO COMPONENTS(MOTOR)","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO COMPONENTS(PDU)","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO COMPONENTS(PDU) TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO COMPONENTS(DCDC)","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP TO COMPONENTS(DCDC) TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-LV HARNESS EARTH MOUNTING","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - VACCUM PUMP BRACKET TO CROSS FRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P20","4":"CHASSIS","5":"Mani","6":"FRONT WHEEL SPEED SENSOR TO KNUCKLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET-NEGATIVE CABLE ON CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-BATTERY HV EARTH TO BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-GOVERNOR LINE TO REFRIGERANT LINE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SUB ASSY ECU AND BATTERY TRAY ASSY-TURBO","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-NEGATIVE CABLE ON BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-LOWER LEG CATCHER LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-LOWER LEG CATCHER RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET - Torque Rod- Transmission bracket","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","31":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-TORQUE BRACKET TO TORQUE ROD","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","31":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-MOUNT LH BODY TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","35":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-MOUNT RH BODY TO CROSSFRAME","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","35":"1","60":"1"},
+{"2":"ER3","3":"C30","4":"CHASSIS","5":"Mani","6":"SET-RH BODY MOUNT TO BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","30":"1","37":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET-HV EARTH STRAP(CHASSIS) ON BIW","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - ENERGY ABSORBER LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"1","32":"1","60":"1"},
+{"2":"ER3","3":"C40","4":"CHASSIS","5":"Mani","6":"SET - ENERGY ABSORBER RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","31":"1","32":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET - CCS2 CHARGING CONNECTOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","21":"1","60":"1"},
+{"2":"ER3","3":"R10","4":"CHASSIS","5":"Mani","6":"SET - WHEEL SPEED SENSOR ON RR RH AXLE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","41":"1","60":"1"},
+{"2":"ER3","3":"C50","4":"CHASSIS","5":"Mani","6":"SET BATTERY TRAY ON B MOUNT AREA","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","33":"1","60":"1"},
+{"2":"ER3","3":"T20","4":"TRIM","5":"Praveen","6":"SET -ENGINE FUSE BOX BRACKET","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","18":"1","57":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - LH-TRANSMISSION MOUNT TO TRANSMISSION","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - CROSS FRAME TO MOUNT","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - DISCHARGE LINE TO COMPRESSOR","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P10","4":"CHASSIS","5":"Mani","6":"SET - e MOTOR Mount RH SIDE","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","37":"1","60":"1"},
+{"2":"ER3","3":"P20","4":"CHASSIS","5":"Mani","6":"STEERING RACK ASSY TO CRADLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"1","60":"1"},
+{"2":"ER3","3":"P20","4":"CHASSIS","5":"Mani","6":"STEERING RACK ASSY TO CRADLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","38":"1","60":"1"},
+{"2":"ER3","3":"R10","4":"CHASSIS","5":"Mani","6":"REAR SPINDLE WITH BACK PLATE TO AXLE LH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"1","60":"1"},
+{"2":"ER3","3":"R10","4":"CHASSIS","5":"Mani","6":"REAR SPINDLE WITH BACK PLATE TO AXLE RH","7":"1","9":"Y","10":"Y","11":"Y","12":"1","13":"5","14":"N","34":"1","60":"1"}
+];
+
+// Column to station name map
+const TRIM_COLS = {17:'T10',18:'T20',19:'T30',20:'T40',21:'T50',22:'T60',23:'T70',24:'T80',25:'T90',26:'T100',27:'TPQG'};
+const CHASSIS_COLS = {28:'C10',29:'C20',30:'C30',31:'C40',32:'C45',33:'C50',34:'C60',35:'C70',36:'C80',37:'P10',38:'P20',39:'P30',40:'R10',41:'PRESS',42:'PQG'};
+const FINAL_COLS = {43:'F10',44:'F20',45:'F30',46:'F40',47:'F50',48:'F60',49:'F70',50:'F80',51:'F90',52:'F100',53:'F110',54:'FPQG'};
+const OUTSIDE_COLS = {55:'TL Audit',56:'Torque Audit',57:'Static',58:'Wheel Align',59:'HL/ABS',60:'Dynamic/UB',61:'CC4',62:'Cert Line'};
+const IMPL_COLS = {64:'Impl Date',65:'Audit Date'};
+
+const ALL_TRIM = Object.keys(TRIM_COLS).map(Number);
+const ALL_CHASSIS = Object.keys(CHASSIS_COLS).map(Number);
+const ALL_FINAL = Object.keys(FINAL_COLS).map(Number);
+const ALL_OUTSIDE = Object.keys(OUTSIDE_COLS).map(Number);
+const ALL_IMPL = Object.keys(IMPL_COLS).map(Number);
+
+function cellVal(row, col) {
+  return row[String(col)] || '';
+}
+
+function makeStationCell(val, type) {
+  if (!val || val === '') return `<td class="data-row"></td>`;
+  const cls = `hit-${type}`;
+  return `<td class="data-row ${cls}">${val}</td>`;
+}
+
+function makeDefCell(val) {
+  if (!val) return `<td class="data-row"></td>`;
+  const cls = val==='1'?'def-1':val==='3'?'def-3':val==='5'?'def-5':'';
+  return `<td class="data-row ${cls}">${val}</td>`;
+}
+
+function makeYNCell(val) {
+  if (!val) return `<td class="data-row"></td>`;
+  const cls = val==='Y'?'val-y':val==='N'?'val-n':'';
+  return `<td class="data-row" style="color:${val==='Y'?'#1B5E20':'#B71C1C'};font-weight:bold">${val}</td>`;
+}
+
+function makeERBadge(er) {
+  if (!er) return '';
+  const cls = er==='ER4'?'er-badge-er4':'er-badge-er3';
+  return `<span class="er-badge ${cls}">${er}</span>`;
+}
+
+function buildRow(row) {
+  const er = cellVal(row, 2);
+  const stn = cellVal(row, 3);
+  const zone = cellVal(row, 4);
+  const tl = cellVal(row, 5);
+  const fm = cellVal(row, 6);
+  const rt = cellVal(row, 7);
+  const dvm = cellVal(row, 9);
+  const dvr = cellVal(row, 10);
+  const prod = cellVal(row, 11);
+  const warr = cellVal(row, 12);
+  const def = cellVal(row, 13);
+  const reoc = cellVal(row, 14);
+
+  let zoneStyle = '';
+  const zl = zone.toLowerCase();
+  if (zl.includes('trim')) zoneStyle = 'color:#1F4E79;font-weight:bold';
+  else if (zl.includes('chassis')) zoneStyle = 'color:#375623;font-weight:bold';
+  else if (zl.includes('final')) zoneStyle = 'color:#7F3F00;font-weight:bold';
+
+  let cells = `
+    <td class="data-row col-er sticky-col sticky-col-1">${makeERBadge(er)}</td>
+    <td class="data-row col-stn sticky-col sticky-col-2">${stn}</td>
+    <td class="data-row col-zone sticky-col sticky-col-3" style="${zoneStyle}">${zone}</td>
+    <td class="data-row col-tl">${tl}</td>
+    <td class="data-row col-fm">${fm}</td>
+    <td class="data-row col-rt">${rt}</td>
+    ${makeYNCell(dvm)}
+    ${makeYNCell(dvr)}
+    ${makeYNCell(prod)}
+    <td class="data-row">${warr}</td>
+    ${makeDefCell(def)}
+    <td class="data-row col-reoc">${reoc}</td>
+  `;
+
+  ALL_TRIM.forEach(c => cells += makeStationCell(cellVal(row,c), 'trim'));
+  ALL_CHASSIS.forEach(c => cells += makeStationCell(cellVal(row,c), 'chassis'));
+  ALL_FINAL.forEach(c => cells += makeStationCell(cellVal(row,c), 'final'));
+  ALL_OUTSIDE.forEach(c => cells += makeStationCell(cellVal(row,c), 'outside'));
+  ALL_IMPL.forEach(c => cells += makeStationCell(cellVal(row,c), 'impl'));
+
+  return `<tr data-er="${er}" data-zone="${zone}" data-tl="${tl}" data-def="${def}" data-fm="${fm.toLowerCase()}">${cells}</tr>`;
+}
+
+let currentData = [...rawData];
+
+function renderTable(data) {
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = data.map(buildRow).join('');
+  document.getElementById('rowCount').textContent = `Showing ${data.length} of ${rawData.length} records`;
+}
+
+function applyFilters() {
+  const zone = document.getElementById('filterZone').value.toLowerCase();
+  const tl = document.getElementById('filterTL').value.toLowerCase();
+  const er = document.getElementById('filterER').value;
+  const def = document.getElementById('filterDef').value;
+  const search = document.getElementById('filterSearch').value.toLowerCase();
+
+  currentData = rawData.filter(r => {
+    if (zone && !r['4']?.toLowerCase().includes(zone)) return false;
+    if (tl && !r['5']?.toLowerCase().includes(tl)) return false;
+    if (er) {
+      if (er === 'None' && r['2']) return false;
+      if (er !== 'None' && r['2'] !== er) return false;
+    }
+    if (def && r['13'] !== def) return false;
+    if (search && !r['6']?.toLowerCase().includes(search)) return false;
+    return true;
+  });
+  renderTable(currentData);
+}
+
+function resetFilters() {
+  document.getElementById('filterZone').value = '';
+  document.getElementById('filterTL').value = '';
+  document.getElementById('filterER').value = '';
+  document.getElementById('filterDef').value = '';
+  document.getElementById('filterSearch').value = '';
+  currentData = [...rawData];
+  renderTable(currentData);
+}
+
+// Initial render
+renderTable(rawData);
+</script>
+</body>
+</html>

@@ -2,52 +2,64 @@ import * as XLSX from "xlsx";
 import { QAMatrixEntry } from "@/types/qaMatrix";
 
 const headers = [
-  "S.No", "Source", "Operation Station", "Designation of the operation",
-  "Concern Discerption [Mode of failure]", "Defect code", "Location code",
-  "Defect Rating (1/3/5)", "Reccurence",
-  "Last 6 Weeks", "Last 5 Weeks", "Last 4 Weeks",
-  "Last 3 Weeks", "Last 2 Weeks", "Last Week", "Reccurence Count+Defect Rating",
+  "S.No", "ER", "Station No.", "Zone/Team", "Team Leader", "Failure Mode", "Repair Time",
+  // Detection 24H
+  "DVM/PQG (Y/N)", "DVR/DVT (Y/N)", "Product Audit SCA (Y/N)", "WARRANTY", "Defect Rating", "Reoccurrence Broken Clean Point",
+  // Detection 48H / TRIM
   "T10", "T20", "T30", "T40", "T50", "T60", "T70", "T80", "T90", "T100", "TPQG",
-  "C10", "C20", "C30", "C40", "C45", "P10", "P20", "P30", "C50", "C60", "C70",
-  "R/Sub", "T/S", "C80", "C PQG",
-  "F10", "F20", "F30", "F40", "F50", "F60", "F70", "F80", "F90", "F100", "FPQG",
-  "Residual Torque",
-  "1.1: Frequency Control", "1.2:Visual Control", "1.3:Periodic audit Process monitoring",
-  "1.4:100% Human Control without tracking", "3.1:SAE(Error Proofing) alert",
-  "3.2:Frequency control (Measurements)", "3.3:100% Manual control in the line with tool",
-  "3.4:100% human control with tracking", "5.1:100% automatic control",
-  "5.2:Impossibility of assembly or subsequent machining", "5.3:SAE(Error proofing) Prohibition",
-  "CVT", "SHOWER", "Dynamic/ UB", "CC4",
-  "MFG", "Quality", "Plant",
-  "Wokstation", "MFG", "Plant",
-  "MFG Action", "Resp", "Target",
+  // Detection 48H / CHASSIS
+  "C10", "C20", "C30", "C40", "C45", "C50", "C60", "C70", "C80", "P10", "P20", "P30", "R10", "PRESS", "PQG",
+  // Detection 48H / FINAL
+  "F10", "F20", "F30", "F40", "F50", "F60", "F70", "F80", "F90", "F100", "F110", "FPQG",
+  // Outside Process Area
+  "Team Leader Audit", "Torque Audit", "Static", "Wheel Alignment", "HL Aiming/ ABS", "Dynamic/ UB", "CC4", "Cert Line",
+  // Implementation
+  "Impl. Date", "Audit Date & Name",
+  // Control Rating
+  "Control Rating Workstation", "Control Rating Zone", "Control Rating Shop", "Control Rating Plant",
+  // Recorded Defect
+  "Escaping Workstation 1M", "Escaping Zone 3M", "Escaping Shop 3M", "CUSTOMER 6M",
+  // Guaranteed Quality
+  "Guaranteed Quality Workstation", "Guaranteed Quality Zone", "Guaranteed Quality Shop", "Guaranteed Quality Plant",
+  // Actions summary
+  "MFG Action", "Resp", "Target"
 ];
 
 export function exportToXLSX(data: QAMatrixEntry[], filename = "qa-matrix-export.xlsx") {
   const rows = data.map(d => [
-    d.sNo, d.source, d.operationStation, d.designation, d.concern,
-    d.defectCode, d.defectLocationCode,
-    d.defectRating, d.recurrence,
-    ...d.weeklyRecurrence,
-    d.recurrenceCountPlusDefect,
-    d.trim.T10, d.trim.T20, d.trim.T30, d.trim.T40, d.trim.T50,
-    d.trim.T60, d.trim.T70, d.trim.T80, d.trim.T90, d.trim.T100, d.trim.TPQG,
-    d.chassis.C10, d.chassis.C20, d.chassis.C30, d.chassis.C40, d.chassis.C45,
-    d.chassis.P10, d.chassis.P20, d.chassis.P30, d.chassis.C50, d.chassis.C60,
-    d.chassis.C70, d.chassis.RSub, d.chassis.TS, d.chassis.C80, d.chassis.CPQG,
-    d.final.F10, d.final.F20, d.final.F30, d.final.F40, d.final.F50,
-    d.final.F60, d.final.F70, d.final.F80, d.final.F90, d.final.F100,
-    d.final.FPQG, d.final.ResidualTorque,
-    d.qControl.freqControl_1_1, d.qControl.visualControl_1_2,
-    d.qControl.periodicAudit_1_3, d.qControl.humanControl_1_4,
-    d.qControl.saeAlert_3_1, d.qControl.freqMeasure_3_2,
-    d.qControl.manualTool_3_3, d.qControl.humanTracking_3_4,
-    d.qControl.autoControl_5_1, d.qControl.impossibility_5_2,
-    d.qControl.saeProhibition_5_3,
-    d.qControlDetail.CVT, d.qControlDetail.SHOWER,
-    d.qControlDetail.DynamicUB, d.qControlDetail.CC4,
-    d.controlRating.MFG, d.controlRating.Quality, d.controlRating.Plant,
-    d.workstationStatus, d.mfgStatus, d.plantStatus,
+    d.sNo,
+    d.source,
+    d.operationStation,
+    d.designation,
+    d.teamLeader ?? d.resp,
+    d.concern,
+    d.detectionFlags?.repairTime ?? "",
+    d.detectionFlags?.dvmPQG ?? "",
+    d.detectionFlags?.dvrDVT ?? "",
+    d.detectionFlags?.productAuditSCA ?? "",
+    d.detectionFlags?.warranty ?? "",
+    d.defectRating,
+    d.detectionFlags?.reoccurrence ?? "",
+    // Trim
+    d.trim.T10, d.trim.T20, d.trim.T30, d.trim.T40, d.trim.T50, d.trim.T60, d.trim.T70, d.trim.T80, d.trim.T90, d.trim.T100, d.trim.TPQG,
+    // Chassis
+    d.chassis.C10, d.chassis.C20, d.chassis.C30, d.chassis.C40, d.chassis.C45, d.chassis.C50, d.chassis.C60, d.chassis.C70, d.chassis.C80, d.chassis.P10, d.chassis.P20, d.chassis.P30, d.chassis.R10, d.chassis.PRESS, d.chassis.PQG,
+    // Final
+    d.final.F10, d.final.F20, d.final.F30, d.final.F40, d.final.F50, d.final.F60, d.final.F70, d.final.F80, d.final.F90, d.final.F100, d.final.F110, d.final.FPQG,
+    // Outside
+    d.final.TLAudit, d.final.TorqueAudit,
+    d.outsideProcess?.Static ?? "", d.outsideProcess?.WheelAlignment ?? "",
+    d.outsideProcess?.HLAssembly ?? "", d.outsideProcess?.DMCCABS ?? "",
+    d.outsideProcess?.CC4 ?? "", d.outsideProcess?.CertLine ?? "",
+    // Impl
+    d.implementationDate ?? "", d.auditDateName ?? "",
+    // Control Rating
+    d.controlRating.Workstation, d.controlRating.Zone, d.controlRating.Shop, d.controlRating.Plant,
+    // Recorded Defect
+    d.recordedDefect?.workstation ?? "", d.recordedDefect?.zone ?? "", d.recordedDefect?.shop ?? "", d.recordedDefect?.customer ?? "",
+    // Guaranteed Quality
+    d.guaranteedQuality.Workstation, d.guaranteedQuality.Zone, d.guaranteedQuality.Shop, d.guaranteedQuality.Plant,
+    // Actions
     d.mfgAction, d.resp, d.target,
   ]);
 

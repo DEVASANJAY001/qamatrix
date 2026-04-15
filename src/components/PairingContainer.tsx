@@ -68,8 +68,10 @@ const PairingContainer = ({
                       <span className="text-xs font-mono bg-destructive/10 text-destructive px-2 py-0.5 rounded">
                         {m.dvxEntries.length} defects
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        Score: {(m.matchScore * 100).toFixed(0)}%
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                        m.matchScore === 1 ? "bg-primary/10 text-primary" : "bg-accent text-accent-foreground"
+                      }`}>
+                        {m.matchScore === 1 ? "Code" : `AI ${(m.matchScore * 100).toFixed(0)}%`}
                       </span>
                       {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     </div>

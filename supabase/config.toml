@@ -1,1 +1,16 @@
 project_id = "pwvtgbbgmfixorlijcsb"
+
+[functions.delete-defects]
+verify_jwt = false
+
+[functions.fetch-spreadsheet]
+verify_jwt = false
+
+[functions.match-defects]
+verify_jwt = false
+
+[functions.pair-by-code]
+verify_jwt = false
+
+[functions.pair-by-semantic]
+verify_jwt = false

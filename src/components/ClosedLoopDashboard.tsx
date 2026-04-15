@@ -42,7 +42,7 @@ const ClosedLoopDonut = ({
                         <Pie
                             data={chartData}
                             cx="50%" cy="50%"
-                            innerRadius={size * 0.27} outerRadius={size * 0.48}
+                            innerRadius={size * 0.30} outerRadius={size * 0.46}
                             dataKey="value" strokeWidth={3} stroke="transparent"
                             className="cursor-pointer"
                             onClick={(_, idx) => {

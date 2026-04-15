@@ -49,7 +49,7 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
 
   // Find columns - use exact name first for "Defect Description" vs "Defect Description Details"
   const dateCol = findCol(headers, "Date");
-  const locationCodeCol = findCol(headers, "Location Code", "Loc Code");
+  const locationCodeCol = findCol(headers, "Location Code", "Loc Code", "location code", "loc code");
   const locationCol = findCol(headers, "Location Details", "Location");
   const codeCol = findCol(headers, "Defect Code");
   // For description vs details: match exact first to avoid collision
@@ -90,9 +90,14 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
     const qtyRaw = qtyCol >= 0 ? row[qtyCol] : 0;
     const qty = typeof qtyRaw === "number" ? qtyRaw : parseInt(String(qtyRaw)) || 1;
 
+    const dateVal = getVal(row, dateCol);
+    // If no dedicated Location Code column, fall back to the Date column value
+    // (some DVX exports put location code in the Date column)
+    const locationCodeVal = locationCodeCol >= 0 ? getVal(row, locationCodeCol) : dateVal;
+
     entries.push({
-      date: getVal(row, dateCol),
-      locationCode: getVal(row, locationCodeCol),
+      date: dateVal,
+      locationCode: locationCodeVal,
       locationDetails: location,
       defectCode: getVal(row, codeCol),
       defectDescription: desc,

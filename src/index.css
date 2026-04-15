@@ -1,8 +1,8 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @layer base {
   :root {
@@ -71,11 +71,11 @@
 
 @layer components {
   .status-ok {
-    @apply bg-[hsl(142,71%,35%)] text-white font-semibold px-2.5 py-0.5 rounded text-xs tracking-wide;
+    @apply bg-[hsl(var(--success))] text-white font-semibold px-2.5 py-0.5 rounded text-xs tracking-wide;
   }
 
   .status-ng {
-    @apply bg-[hsl(0,72%,51%)] text-white font-semibold px-2.5 py-0.5 rounded text-xs tracking-wide;
+    @apply bg-[hsl(var(--destructive))] text-white font-semibold px-2.5 py-0.5 rounded text-xs tracking-wide;
   }
 
   .score-cell {
@@ -87,10 +87,556 @@
   }
 
   .dashboard-card {
-    @apply bg-card border border-border rounded-lg p-4 shadow-sm transition-all duration-200 hover:border-[hsl(210,70%,45%,0.4)];
+    @apply bg-card border border-border rounded-lg p-4 shadow-sm transition-all duration-200 hover:border-[hsl(var(--primary)/0.4)];
   }
 
   .section-header {
     @apply text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2;
+  }
+}
+
+/* ─── QA Matrix Overhaul Styles (from demo.html) ─── */
+.sqam-body {
+  font-family: Calibri, Arial, sans-serif;
+  font-size: 10px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 120px);
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  position: relative;
+}
+
+#sqamTable {
+  border-collapse: separate;
+  border-spacing: 0;
+  white-space: nowrap;
+  width: max-content;
+  background-color: white;
+}
+
+#sqamTable th,
+#sqamTable td {
+  border: 1px solid #999;
+  padding: 2px 4px;
+  text-align: center;
+  vertical-align: middle;
+  font-size: 9px;
+  min-width: 28px;
+}
+
+/* Section header rows */
+#sqamTable thead th.hdr-main-24h {
+  background: #BDD7EE;
+  color: #1F4E79;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+#sqamTable thead th.hdr-main-48h {
+  background: #FFF2CC;
+  color: #7F6000;
+  font-weight: bold;
+  font-size: 10px;
+}
+
+#sqamTable thead th.hdr-section-eng {
+  background: #2E75B6;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-section-mfg {
+  background: #ED7D31;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-label {
+  background: #D9D9D9;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-detection {
+  background: #E2EFDA;
+  font-weight: bold;
+}
+
+/* Process area headers */
+#sqamTable thead th.hdr-trim {
+  background: #1F4E79;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-chassis {
+  background: #375623;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-final {
+  background: #7F3F00;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-outside {
+  background: #595959;
+  color: white;
+  font-weight: bold;
+}
+
+#sqamTable thead th.hdr-impl {
+  background: #4472C4;
+  color: white;
+  font-weight: bold;
+}
+
+/* Station sub-headers */
+#sqamTable thead th.sub-trim {
+  background: #D6E4F7;
+  color: #1F4E79;
+  font-weight: bold;
+}
+
+#sqamTable thead th.sub-chassis {
+  background: #D6F0D6;
+  color: #375623;
+  font-weight: bold;
+}
+
+#sqamTable thead th.sub-final {
+  background: #FFF2CC;
+  color: #7F3F00;
+  font-weight: bold;
+}
+
+#sqamTable thead th.sub-outside {
+  background: #EDEDED;
+  color: #333;
+  font-weight: bold;
+}
+
+#sqamTable thead th.sub-impl {
+  background: #DAE8FC;
+  color: #333;
+  font-weight: bold;
+}
+
+/* Fixed info columns */
+.col-er {
+  background: #FFF9C4;
+  min-width: 36px;
+}
+
+.col-stn {
+  background: #E8F5E9;
+  min-width: 42px;
+  font-weight: bold;
+}
+
+.col-zone {
+  background: #E3F2FD;
+  min-width: 55px;
+}
+
+.col-tl {
+  background: #FFF3E0;
+  min-width: 55px;
+}
+
+.col-fm {
+  background: #FCE4EC;
+  min-width: 200px;
+  text-align: left;
+  white-space: normal;
+  max-width: 260px;
+}
+
+.col-rt {
+  background: #F3E5F5;
+  min-width: 32px;
+}
+
+.col-dvm {
+  background: #E0F7FA;
+  min-width: 36px;
+}
+
+.col-def {
+  background: #FFEBEE;
+  font-weight: bold;
+  min-width: 32px;
+}
+
+.col-reoc {
+  background: #FFF8E1;
+  min-width: 36px;
+}
+
+/* Data cell value coloring */
+.val-y {
+  color: #1B5E20;
+  font-weight: bold;
+}
+
+.val-n {
+  color: #B71C1C;
+  font-weight: bold;
+}
+
+/* Data rows highlighting */
+#sqamTable tr:nth-child(even) td.data-row {
+  filter: brightness(0.97);
+}
+
+#sqamTable tr:hover td.data-row {
+  background: #FFFDE7 !important;
+}
+
+.val-ctrl {
+  background-color: #E2EFDA !important;
+  color: #375623 !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.val-rd {
+  background-color: #FFF2CC !important;
+  color: #7F6000 !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.val-gq {
+  background-color: #DDEBF7 !important;
+  color: #1F4E79 !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.er-badge {
+  display: inline-block;
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-weight: bold;
+  font-size: 8px;
+}
+
+.er-badge-er4 {
+  background: #FFA726;
+  color: #4E342E;
+}
+
+.er-badge-er3 {
+  background: #AB47BC;
+  color: white;
+}
+
+/* Defect rating colors */
+.def-1 {
+  background: #C6EFCE;
+  color: #276221;
+  font-weight: bold;
+}
+
+.def-3 {
+  background: #FFEB9C;
+  color: #9C6500;
+  font-weight: bold;
+}
+
+.def-5 {
+  background: #FFC7CE;
+  color: #9C0006;
+  font-weight: bold;
+}
+
+/* Station hit cell */
+.hit-trim {
+  background: #BDD7EE;
+  color: #1F4E79;
+  font-weight: bold;
+}
+
+.hit-chassis {
+  background: #C6EFCE;
+  color: #375623;
+  font-weight: bold;
+}
+
+.hit-final {
+  background: #FFE699;
+  color: #7F6000;
+  font-weight: bold;
+}
+
+.hit-outside {
+  background: #EDEDED;
+  color: #333;
+  font-weight: bold;
+}
+
+.hit-impl {
+  background: #DAE8FC;
+  color: #333;
+  font-weight: bold;
+}
+
+/* Sticky headers & columns */
+.sqam-sticky-col {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  border-right: 1px solid #999 !important;
+  background-clip: padding-box;
+}
+
+/* Intersection cells (sticky top + left) get highest z-index via JS, but we set base here */
+#sqamTable thead th.sqam-sticky-col {
+  z-index: 100 !important;
+}
+
+/* CRITICAL: Body sticky cells MUST have a solid background so scrolling data goes behind */
+#sqamTable tbody td.sqam-sticky-col {
+  background-color: #FFFFFF;
+  z-index: 12;
+}
+
+#sqamTable tbody tr:nth-child(even) td.sqam-sticky-col {
+  background-color: #FAFAFA;
+}
+
+#sqamTable tbody tr:hover td.sqam-sticky-col {
+  background-color: #FFFDE7 !important;
+}
+
+/* Preserve original column colors for sticky body cells */
+#sqamTable tbody td.col-er.sqam-sticky-col {
+  background-color: #FFF9C4 !important;
+}
+
+#sqamTable tbody td.col-stn.sqam-sticky-col {
+  background-color: #E8F5E9 !important;
+}
+
+#sqamTable tbody td.col-zone.sqam-sticky-col {
+  background-color: #E3F2FD !important;
+}
+
+#sqamTable tbody td.col-tl.sqam-sticky-col {
+  background-color: #FFF3E0 !important;
+}
+
+#sqamTable tbody td.col-fm.sqam-sticky-col {
+  background-color: #FCE4EC !important;
+}
+
+#sqamTable tbody td.col-rt.sqam-sticky-col {
+  background-color: #F3E5F5 !important;
+}
+
+#sqamTable tbody td.col-reoc.sqam-sticky-col {
+  background-color: #FFF8E1 !important;
+}
+
+/* Defect rating backgrounds for sticky cells */
+#sqamTable tbody td.def-1.sqam-sticky-col {
+  background-color: #C6EFCE !important;
+}
+
+#sqamTable tbody td.def-3.sqam-sticky-col {
+  background-color: #FFEB9C !important;
+}
+
+#sqamTable tbody td.def-5.sqam-sticky-col {
+  background-color: #FFC7CE !important;
+}
+
+.sqam-sticky-col-0 {
+  left: 0;
+  z-index: 12;
+}
+
+.sqam-sticky-col-1 {
+  left: 30px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-2 {
+  left: 66px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-3 {
+  left: 108px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-4 {
+  left: 163px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-5 {
+  left: 218px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-6 {
+  left: 418px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-7 {
+  left: 450px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-8 {
+  left: 486px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-9 {
+  left: 522px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-10 {
+  left: 558px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-11 {
+  left: 608px;
+  z-index: 12;
+}
+
+.sqam-sticky-col-12 {
+  left: 640px;
+  z-index: 12;
+  border-right: 3px double #333 !important;
+}
+
+/* Removed tr sticky as we move it to th in JS for better compatibility */
+
+/* THE INTERSECTION: High z-index is required here to be above both horizontal and vertical sticky elements */
+#sqamTable thead th.sqam-sticky-col {
+  z-index: 100 !important;
+  background-color: #D9D9D9 !important;
+  /* Restore default sticky column header color */
+  background-clip: padding-box;
+}
+
+/* Individual header backgrounds must be solid to prevent "ghosting" when data scrolls under */
+#sqamTable thead th {
+  background-clip: padding-box;
+  background-color: white;
+  /* Default fallback */
+}
+
+/* Section-specific backgrounds for sticky headers to preserve theme */
+#sqamTable thead th.hdr-main-24h.sqam-sticky-col {
+  background-color: #BDD7EE !important;
+}
+
+#sqamTable thead th.hdr-detection.sqam-sticky-col {
+  background-color: #E2EFDA !important;
+}
+
+#sqamTable thead th.hdr-def.sqam-sticky-col {
+  background-color: #FF0000 !important;
+  color: white !important;
+}
+
+#sqamTable thead th.hdr-label.sqam-sticky-col {
+  background-color: #D9D9D9 !important;
+}
+
+/* Ensure all sticky header cells have solid background */
+#sqamTable thead th.hdr-trim.sqam-sticky-col {
+  background-color: #1F4E79 !important;
+}
+
+#sqamTable thead th.hdr-chassis.sqam-sticky-col {
+  background-color: #375623 !important;
+}
+
+#sqamTable thead th.hdr-final.sqam-sticky-col {
+  background-color: #7F3F00 !important;
+}
+
+#sqamTable thead th.hdr-outside.sqam-sticky-col {
+  background-color: #595959 !important;
+}
+
+#sqamTable thead th.hdr-impl.sqam-sticky-col {
+  background-color: #4472C4 !important;
+}
+
+/* ─── Mobile Optimizations ─── */
+@media (max-width: 768px) {
+  .table-wrapper {
+    max-height: none;
+    border: none;
+    border-radius: 0;
+  }
+
+  /* Make header stack better */
+  header div.container {
+    height: auto;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+
+  /* Card View for QA Matrix Table */
+  .mobile-card {
+    @apply bg-card border border-border rounded-xl p-4 shadow-sm mb-4 space-y-3;
+  }
+
+  .mobile-card-header {
+    @apply flex items-center justify-between border-b border-border pb-2 mb-2;
+  }
+
+  .mobile-card-section {
+    @apply space-y-1.5;
+  }
+
+  .mobile-card-label {
+    @apply text-[10px] uppercase tracking-wider text-muted-foreground font-bold;
+  }
+
+  .mobile-card-value {
+    @apply text-sm font-medium;
+  }
+
+  /* Hide original table parts on very small screens if using card view */
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+/* Responsive Grid Adjustments */
+.responsive-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .responsive-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }

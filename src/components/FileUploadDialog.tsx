@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,27 +23,61 @@ interface FileUploadDialogProps {
 const n = null;
 
 function normalizeHeader(h: string): string {
-  return String(h || "").trim().toLowerCase().replace(/[\s_]+/g, " ");
+  return String(h || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[.\/\\_]+/g, " ") // Replace dots, slashes, backslashes, underscores with space
+    .replace(/\s+/g, " ")       // Normalize spaces
+    .trim();
 }
 
 function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
   const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
   if (rows.length < 2) return [];
 
-  const rawHeaders = (rows[0] || []).map((h: any) => String(h || "").trim());
+  const colMap: Record<string, number> = {};
+  const rawHeaders: string[] = [];
+
+  let lastHeaderRow = -1;
+  // Scan first 10 rows for headers to handle multiple header levels
+  for (let r = 0; r < Math.min(rows.length, 10); r++) {
+    const row = rows[r];
+    if (row) {
+      let rowHasHeader = false;
+      row.forEach((h: any, i: number) => {
+        const val = String(h || "").trim();
+        if (val) {
+          const norm = normalizeHeader(val);
+          rawHeaders[i] = val;
+          colMap[norm] = i;
+
+          // Check if this cell looks like a known header keyword to identify the header row
+          if (["station number", "station", "stn", "failure mode", "concern", "detection date", "date", "source", "s.no", "sno", "responsible", "team leader", "area", "designation"].includes(norm)) {
+            rowHasHeader = true;
+          }
+        }
+      });
+      if (rowHasHeader) lastHeaderRow = r;
+    }
+  }
+
   const headers = rawHeaders.map(normalizeHeader);
 
-  const colMap: Record<string, number> = {};
-  headers.forEach((h, i) => { colMap[h] = i; });
-
   const find = (...names: string[]): number => {
+    // 1. Exact matches first
     for (const name of names) {
       const nm = normalizeHeader(name);
       if (colMap[nm] !== undefined) return colMap[nm];
-      const idx = rawHeaders.findIndex(r => r === name);
-      if (idx !== -1) return idx;
-      const idx2 = headers.findIndex(h => h.includes(nm));
-      if (idx2 !== -1) return idx2;
+    }
+    // 2. Fuzzy matches: Check if any detected header contains the target name
+    for (const name of names) {
+      const nm = normalizeHeader(name);
+      if (nm.length < 2) continue;
+      // Find a key in colMap that contains our normalized name (or vice versa)
+      const foundKey = Object.keys(colMap).find(key =>
+        key.includes(nm) || nm.includes(key)
+      );
+      if (foundKey !== undefined) return colMap[foundKey];
     }
     return -1;
   };
@@ -61,16 +96,22 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
   };
 
   const sNoCol = find("S.No", "sno", "s.no");
-  const sourceCol = find("Source", "src");
-  const stationCol = find("Station", "stn", "operation station");
-  const areaCol = find("Area", "designation");
-  const concernCol = find("Concern", "description");
-  const drCol = find("Defect Rating", "dr", "rating");
-  const respCol = find("Resp", "responsible");
-  const actionCol = find("MFG Action", "action");
-  const targetCol = find("Target");
-  const defectCodeCol = find("Defect Code", "defect code", "code");
-  const locationCodeCol = find("Location Code", "location code", "loc code", "defect location code");
+  const sourceCol = find("Source", "src", "er", "detection date", "date");
+  const stationCol = find("Station", "stn", "operation station", "station number", "station no", "station no.", "station id");
+  const areaCol = find("Area", "designation", "zone", "team", "zone team", "zone/team", "department");
+  const concernCol = find("Concern", "description", "failure", "failure mode", "defect description");
+  const drCol = find("Defect Rating", "dr", "rating", "defect", "defect rating (1/3/5)", "severity");
+
+  console.log("Header Map:", colMap);
+  console.log("Detected Columns:", { stationCol, areaCol, concernCol, sourceCol });
+  const respCol = find("Resp", "responsible", "tl", "team leader", "supervisor", "lead", "mfg supervisor");
+  const actionCol = find("MFG Action", "action", "action plan", "corrective action");
+  const targetCol = find("Target", "deadline", "target date");
+  const defectCodeCol = find("Defect Code", "defect code", "code", "failure code");
+  const locationCodeCol = find("Location Code", "location code", "loc code", "defect location code", "location");
+  const repairTimeCol = find("Repair Time", "rt", "repair time", "rt (min)");
+
+  console.log("Crucial Indices:", { stationCol, areaCol, respCol, concernCol, drCol });
 
   const w6Col = find("W-6");
   const w5Col = find("W-5");
@@ -80,61 +121,83 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
   const w1Col = find("W-1");
   const rcdrCol = find("RC+DR");
 
+  // Specific index fallback for SQAM_Updatw.xlsm structure
+  const useIndices = (colMap["er"] !== undefined || colMap["source"] !== undefined || rows.length > 5);
+
+  const getIdx = (name: string, fallbackIdx: number) => {
+    const found = find(name);
+    return (found === -1 && useIndices) ? fallbackIdx : found;
+  };
+
+  // Dynamic Anchors (only DVM and T10 needed now)
+  const dvmIdx = find("DVM");
+  const t10Idx = find("T10");
+  const implIdx = find("Implementation date");
+
+  const detectionCols = {
+    dvm: dvmIdx !== -1 ? dvmIdx : getIdx("DVM", 7),
+    dvr: dvmIdx !== -1 ? dvmIdx + 1 : getIdx("DVR", 8),
+    audit: dvmIdx !== -1 ? dvmIdx + 2 : getIdx("Product Audit", 9),
+    warranty: dvmIdx !== -1 ? dvmIdx + 3 : getIdx("WARRANTY", 10),
+    reoc: dvmIdx !== -1 ? dvmIdx + 5 : getIdx("Reoccurrence", 12),
+  };
+
+  const tBase = t10Idx !== -1 ? t10Idx : 15;
   const tCols = {
-    T10: find("T10"), T20: find("T20"), T30: find("T30"), T40: find("T40"),
-    T50: find("T50"), T60: find("T60"), T70: find("T70"), T80: find("T80"),
-    T90: find("T90"), T100: find("T100"), TPQG: find("TPQG"),
+    T10: tBase, T20: tBase + 1, T30: tBase + 2, T40: tBase + 3,
+    T50: tBase + 4, T60: tBase + 5, T70: tBase + 6, T80: tBase + 7,
+    T90: tBase + 8, T100: tBase + 9, TPQG: tBase + 10,
   };
 
   const cCols = {
-    C10: find("C10"), C20: find("C20"), C30: find("C30"), C40: find("C40"),
-    C45: find("C45"), P10: find("P10"), P20: find("P20"), P30: find("P30"),
-    C50: find("C50"), C60: find("C60"), C70: find("C70"), RSub: find("RSub"),
-    TS: find("TS"), C80: find("C80"), CPQG: find("CPQG"),
+    C10: tBase + 11, C20: tBase + 12, C30: tBase + 13, C40: tBase + 14,
+    C45: tBase + 15, C50: tBase + 16, C60: tBase + 17, C70: tBase + 18,
+    C80: tBase + 19, P10: tBase + 20, P20: tBase + 21, P30: tBase + 22,
+    R10: tBase + 23, PRESS: tBase + 24, PQG: tBase + 25,
   };
 
   const fCols = {
-    F10: find("F10"), F20: find("F20"), F30: find("F30"), F40: find("F40"),
-    F50: find("F50"), F60: find("F60"), F70: find("F70"), F80: find("F80"),
-    F90: find("F90"), F100: find("F100"), FPQG: find("FPQG"),
-  };
-  const residualTorqueCol = find("Residual Torque");
-
-  const qcCols = {
-    freqControl_1_1: find("1.1"),
-    visualControl_1_2: find("1.2"),
-    periodicAudit_1_3: find("1.3"),
-    humanControl_1_4: find("1.4"),
-    saeAlert_3_1: find("3.1"),
-    freqMeasure_3_2: find("3.2"),
-    manualTool_3_3: find("3.3"),
-    humanTracking_3_4: find("3.4"),
-    autoControl_5_1: find("5.1"),
-    impossibility_5_2: find("5.2"),
-    saeProhibition_5_3: find("5.3"),
+    F10: tBase + 26, F20: tBase + 27, F30: tBase + 28, F40: tBase + 29,
+    F50: tBase + 30, F60: tBase + 31, F70: tBase + 32, F80: tBase + 33,
+    F90: tBase + 34, F100: tBase + 35, F110: tBase + 36, FPQG: tBase + 37,
+    TLAudit: tBase + 38, TorqueAudit: tBase + 39,
   };
 
-  const cvtCol = find("CVT");
-  const showerCol = find("SHOWER");
-  const dynamicUBCol = find("Dynamic/UB", "Dynamic/ UB", "DynamicUB");
-  const cc4Col = find("CC4");
+  const outsideCols = {
+    Static: tBase + 40,
+    WheelAlignment: tBase + 41,
+    HLAssembly: tBase + 42,
+    DMCCABS: tBase + 43,
+    CC4: tBase + 44,
+    CertLine: tBase + 45,
+  };
 
-  const ctrlMfgCol = find("CTRL MFG");
-  const ctrlQtyCol = find("CTRL Qty");
-  const ctrlPlantCol = find("CTRL Plant");
-
-  const wsStatusCol = find("WS Status");
-  const mfgStatusCol = find("MFG Status");
-  const plantStatusCol = find("Plant Status");
+  const implDateCol = implIdx !== -1 ? implIdx : getIdx("Impl. Date", 62);
+  const auditDateNameCol = implIdx !== -1 ? implIdx + 1 : getIdx("Audit Date", 63);
 
   const entries: QAMatrixEntry[] = [];
 
-  for (let i = 1; i < rows.length; i++) {
+  const dataStartRow = lastHeaderRow !== -1 ? lastHeaderRow + 1 : 1;
+
+  for (let i = dataStartRow; i < rows.length; i++) {
     const row = rows[i];
     if (!row || row.length === 0) continue;
 
-    const concern = getVal(row, concernCol);
-    if (!concern) continue;
+    const operationStation = getVal(row, stationCol) || "";
+    const designation = getVal(row, areaCol) || "";
+    const concern = getVal(row, concernCol) || "";
+
+    // A valid row must have AT LEAST a concern OR an operation station
+    if (!concern && !operationStation) continue;
+
+    // Skip if it is definitely a header repetition (fuzzy check)
+    const lowerConcern = concern.toLowerCase();
+    const lowerStation = operationStation.toLowerCase();
+
+    if (lowerConcern === "concern" || lowerConcern === "failure mode" ||
+      lowerStation === "station" || lowerStation === "number" ||
+      lowerStation === "station no." || lowerStation === "station number" ||
+      lowerConcern === "detection date") continue;
 
     const drRaw = getNum(row, drCol);
     const defectRating = (drRaw === 1 || drRaw === 3 || drRaw === 5) ? drRaw : 1;
@@ -154,44 +217,32 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
 
     const chassis = {
       C10: getNum(row, cCols.C10), C20: getNum(row, cCols.C20), C30: getNum(row, cCols.C30),
-      C40: getNum(row, cCols.C40), C45: getNum(row, cCols.C45), P10: getNum(row, cCols.P10),
-      P20: getNum(row, cCols.P20), P30: getNum(row, cCols.P30), C50: getNum(row, cCols.C50),
-      C60: getNum(row, cCols.C60), C70: getNum(row, cCols.C70), RSub: getNum(row, cCols.RSub),
-      TS: getNum(row, cCols.TS), C80: getNum(row, cCols.C80), CPQG: getNum(row, cCols.CPQG),
+      C40: getNum(row, cCols.C40), C45: getNum(row, cCols.C45), C50: getNum(row, cCols.C50),
+      C60: getNum(row, cCols.C60), C70: getNum(row, cCols.C70), C80: getNum(row, cCols.C80),
+      P10: getNum(row, cCols.P10), P20: getNum(row, cCols.P20), P30: getNum(row, cCols.P30),
+      R10: getNum(row, cCols.R10), PRESS: getNum(row, cCols.PRESS), PQG: getNum(row, cCols.PQG),
     };
 
     const final = {
       F10: getNum(row, fCols.F10), F20: getNum(row, fCols.F20), F30: getNum(row, fCols.F30),
       F40: getNum(row, fCols.F40), F50: getNum(row, fCols.F50), F60: getNum(row, fCols.F60),
       F70: getNum(row, fCols.F70), F80: getNum(row, fCols.F80), F90: getNum(row, fCols.F90),
-      F100: getNum(row, fCols.F100), FPQG: getNum(row, fCols.FPQG),
-      ResidualTorque: getNum(row, residualTorqueCol),
+      F100: getNum(row, fCols.F100), F110: getNum(row, fCols.F110), FPQG: getNum(row, fCols.FPQG),
+      TLAudit: getNum(row, fCols.TLAudit), TorqueAudit: getNum(row, fCols.TorqueAudit),
     };
 
-    const qControl = {
-      freqControl_1_1: getNum(row, qcCols.freqControl_1_1),
-      visualControl_1_2: getNum(row, qcCols.visualControl_1_2),
-      periodicAudit_1_3: getNum(row, qcCols.periodicAudit_1_3),
-      humanControl_1_4: getNum(row, qcCols.humanControl_1_4),
-      saeAlert_3_1: getNum(row, qcCols.saeAlert_3_1),
-      freqMeasure_3_2: getNum(row, qcCols.freqMeasure_3_2),
-      manualTool_3_3: getNum(row, qcCols.manualTool_3_3),
-      humanTracking_3_4: getNum(row, qcCols.humanTracking_3_4),
-      autoControl_5_1: getNum(row, qcCols.autoControl_5_1),
-      impossibility_5_2: getNum(row, qcCols.impossibility_5_2),
-      saeProhibition_5_3: getNum(row, qcCols.saeProhibition_5_3),
+    const qControl: any = {
+      freqControl_1_1: null, visualControl_1_2: null, periodicAudit_1_3: null, humanControl_1_4: null,
+      saeAlert_3_1: null, freqMeasure_3_2: null, manualTool_3_3: null, humanTracking_3_4: null,
+      autoControl_5_1: null, impossibility_5_2: null, saeProhibition_5_3: null
     };
 
-    const qControlDetail = {
-      CVT: getNum(row, cvtCol),
-      SHOWER: getNum(row, showerCol),
-      DynamicUB: getNum(row, dynamicUBCol),
-      CC4: getNum(row, cc4Col),
+    const qControlDetail: any = {
+      CVT: null, SHOWER: null, DynamicUB: null, CC4: null
     };
 
-    const wsRaw = getVal(row, wsStatusCol).toUpperCase();
-    const mfgRaw = getVal(row, mfgStatusCol).toUpperCase();
-    const plantRaw = getVal(row, plantStatusCol).toUpperCase();
+    const teamLeader = getVal(row, respCol) || "";
+    const resp = getVal(row, respCol) || "";
 
     const entry: QAMatrixEntry = {
       sNo: getNum(row, sNoCol) ?? (startSNo + entries.length),
@@ -203,21 +254,54 @@ function parseSheet(sheet: XLSX.WorkSheet, startSNo: number): QAMatrixEntry[] {
       recurrence,
       weeklyRecurrence,
       recurrenceCountPlusDefect: getNum(row, rcdrCol) ?? (defectRating + recurrence),
-      trim, chassis, final, qControl, qControlDetail,
-      controlRating: {
-        MFG: getNum(row, ctrlMfgCol) ?? 0,
-        Quality: getNum(row, ctrlQtyCol) ?? 0,
-        Plant: getNum(row, ctrlPlantCol) ?? 0,
+      trim, chassis, final,
+      outsideProcess: {
+        Static: getNum(row, outsideCols.Static),
+        WheelAlignment: getNum(row, outsideCols.WheelAlignment),
+        HLAssembly: getNum(row, outsideCols.HLAssembly),
+        DMCCABS: getNum(row, outsideCols.DMCCABS),
+        CC4: getNum(row, outsideCols.CC4),
+        CertLine: getNum(row, outsideCols.CertLine),
       },
-      guaranteedQuality: { Workstation: n, MFG: n, Plant: n },
-      workstationStatus: wsRaw === "OK" ? "OK" : "NG",
-      mfgStatus: mfgRaw === "OK" ? "OK" : "NG",
-      plantStatus: plantRaw === "OK" ? "OK" : "NG",
+      qControl,
+      qControlDetail,
+      controlRating: {
+        Workstation: null,
+        Zone: null,
+        Shop: null,
+        Plant: null,
+      },
+      recordedDefect: {
+        workstation: null,
+        zone: null,
+        shop: null,
+        customer: null,
+      },
+      guaranteedQuality: {
+        Workstation: null,
+        Zone: null,
+        Shop: null,
+        Plant: null,
+      },
+      workstationStatus: "NG",
+      mfgStatus: "NG",
+      plantStatus: "NG",
       mfgAction: getVal(row, actionCol),
       defectCode: getVal(row, defectCodeCol),
       defectLocationCode: getVal(row, locationCodeCol),
-      resp: getVal(row, respCol),
+      resp,
+      teamLeader,
       target: getVal(row, targetCol),
+      detectionFlags: {
+        repairTime: getVal(row, repairTimeCol),
+        dvmPQG: getVal(row, detectionCols.dvm),
+        dvrDVT: getVal(row, detectionCols.dvr),
+        productAuditSCA: getVal(row, detectionCols.audit),
+        warranty: getVal(row, detectionCols.warranty),
+        reoccurrence: getVal(row, detectionCols.reoc),
+      },
+      implementationDate: getVal(row, implDateCol),
+      auditDateName: getVal(row, auditDateNameCol),
     };
 
     entries.push(recalculateStatuses(entry));
@@ -302,6 +386,9 @@ const FileUploadDialog = ({ nextSNo, onImport }: FileUploadDialogProps) => {
       <DialogContent className="sm:max-w-[580px]">
         <DialogHeader>
           <DialogTitle>Import QA Matrix Data</DialogTitle>
+          <DialogDescription>
+            Choose a file or provide a link to import your QA Matrix concerns.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-2">
           {/* Mode toggle */}
@@ -366,27 +453,61 @@ const FileUploadDialog = ({ nextSNo, onImport }: FileUploadDialogProps) => {
           {preview.length > 0 && (
             <div className="max-h-[200px] overflow-auto border border-border rounded-md">
               <table className="w-full text-xs">
-                <thead className="bg-muted/50 sticky top-0">
+                <thead className="bg-muted/80 sticky top-0 border-b border-border">
                   <tr>
-                    <th className="px-2 py-1 text-left">#</th>
-                    <th className="px-2 py-1 text-left">Source</th>
-                    <th className="px-2 py-1 text-left">Station</th>
-                    <th className="px-2 py-1 text-left">Concern</th>
-                    <th className="px-2 py-1 text-left">Defect Code</th>
-                    <th className="px-2 py-1 text-left">Loc Code</th>
-                    <th className="px-2 py-1 text-center">DR</th>
+                    <th rowSpan={2} className="px-1 py-1 text-center border-r border-border min-w-8">#</th>
+                    <th rowSpan={2} className="px-2 py-1 text-left border-r border-border min-w-16">Station</th>
+                    <th rowSpan={2} className="px-1 py-1 text-left border-r border-border min-w-16">Zone</th>
+                    <th rowSpan={2} className="px-1 py-1 text-left border-r border-border min-w-16">TL</th>
+                    <th rowSpan={2} className="px-2 py-1 text-left border-r border-border">Concern</th>
+                    <th colSpan={4} className="px-1 py-0.5 text-center border-r border-border bg-green-100/50">Control Rating</th>
+                    <th colSpan={4} className="px-1 py-0.5 text-center border-r border-border bg-amber-100/50">Recorded Defect</th>
+                    <th colSpan={4} className="px-1 py-0.5 text-center border-border bg-blue-100/50">Guaranteed Quality</th>
+                  </tr>
+                  <tr className="border-t border-border">
+                    {/* Control Rating */}
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">WS</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">Z</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">S</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">P</th>
+                    {/* Recorded Defect */}
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">1M</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">3Mz</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">3Ms</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">6M</th>
+                    {/* Guaranteed Quality */}
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">WS</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">Z</th>
+                    <th className="px-1 py-0.5 text-[9px] border-r border-border text-center">S</th>
+                    <th className="px-1 py-0.5 text-[9px] text-center">P</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.slice(0, 20).map((entry) => (
-                    <tr key={entry.sNo} className="border-t border-border/30">
-                      <td className="px-2 py-1">{entry.sNo}</td>
-                      <td className="px-2 py-1">{entry.source}</td>
-                      <td className="px-2 py-1">{entry.operationStation}</td>
-                      <td className="px-2 py-1 max-w-[200px] truncate">{entry.concern}</td>
-                      <td className="px-2 py-1 font-mono text-[10px]">{entry.defectCode}</td>
-                      <td className="px-2 py-1 font-mono text-[10px]">{entry.defectLocationCode}</td>
-                      <td className="px-2 py-1 text-center">{entry.defectRating}</td>
+                    <tr key={entry.sNo} className="border-t border-border/30 hover:bg-muted/30">
+                      <td className="px-1 py-1 text-center border-r border-border/30">{entry.sNo}</td>
+                      <td className="px-2 py-1 border-r border-border/30">{entry.operationStation}</td>
+                      <td className="px-1 py-1 border-r border-border/30 text-[10px]">{entry.designation}</td>
+                      <td className="px-1 py-1 border-r border-border/30 text-[10px]">{entry.teamLeader}</td>
+                      <td className="px-2 py-1 max-w-[150px] truncate border-r border-border/30" title={entry.concern}>{entry.concern}</td>
+
+                      {/* Control Rating */}
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-green-700 bg-green-50/20">{entry.controlRating?.Workstation ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-green-700 bg-green-50/20">{entry.controlRating?.Zone ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-green-700 bg-green-50/20">{entry.controlRating?.Shop ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-green-700 bg-green-50/20">{entry.controlRating?.Plant ?? "-"}</td>
+
+                      {/* Recorded Defect */}
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-amber-700 bg-amber-50/20">{entry.recordedDefect?.workstation ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-amber-700 bg-amber-50/20">{entry.recordedDefect?.zone ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-amber-700 bg-amber-50/20">{entry.recordedDefect?.shop ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-amber-700 bg-amber-50/20">{entry.recordedDefect?.customer ?? "-"}</td>
+
+                      {/* Guaranteed Quality */}
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-blue-700 bg-blue-50/20">{entry.guaranteedQuality?.Workstation ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-blue-700 bg-blue-50/20">{entry.guaranteedQuality?.Zone ?? "-"}</td>
+                      <td className="px-1 py-1 text-center border-r border-border/30 font-semibold text-blue-700 bg-blue-50/20">{entry.guaranteedQuality?.Shop ?? "-"}</td>
+                      <td className="px-1 py-1 text-center font-semibold text-blue-700 bg-blue-50/20">{entry.guaranteedQuality?.Plant ?? "-"}</td>
                     </tr>
                   ))}
                 </tbody>

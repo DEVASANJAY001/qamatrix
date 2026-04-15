@@ -18,16 +18,16 @@ export interface ChassisScores {
   C30: number | null;
   C40: number | null;
   C45: number | null;
-  P10: number | null;
-  P20: number | null;
-  P30: number | null;
   C50: number | null;
   C60: number | null;
   C70: number | null;
-  RSub: number | null;
-  TS: number | null;
   C80: number | null;
-  CPQG: number | null;
+  P10: number | null;
+  P20: number | null;
+  P30: number | null;
+  R10: number | null;
+  PRESS: number | null;
+  PQG: number | null;
 }
 
 export interface FinalScores {
@@ -41,8 +41,10 @@ export interface FinalScores {
   F80: number | null;
   F90: number | null;
   F100: number | null;
+  F110: number | null;
   FPQG: number | null;
-  ResidualTorque: number | null;
+  TLAudit: number | null;
+  TorqueAudit: number | null;
 }
 
 export interface QControlScores {
@@ -66,18 +68,45 @@ export interface QControlDetail {
   CC4: number | null;
 }
 
+export interface RecordedDefectMetrics {
+  workstation?: number | null;
+  zone?: number | null;
+  shop?: number | null;
+  customer?: number | null;
+}
+
+export interface OutsideProcessArea {
+  Static?: number | null;
+  WheelAlignment?: number | null;
+  HLAssembly?: number | null;
+  DMCCABS?: number | null;
+  CC4?: number | null;
+  CertLine?: number | null;
+}
+
+export interface DetectionFlags {
+  repairTime?: string;
+  dvmPQG?: string;
+  dvrDVT?: string;
+  productAuditSCA?: string;
+  warranty?: string;
+  reoccurrence?: string;
+}
+
 export type Status = 'OK' | 'NG';
 
 export interface ControlRating {
-  MFG: number | null;
-  Quality: number | null;
+  Workstation: number | null;
+  Zone: number | null;
+  Shop: number | null;
   Plant: number | null;
 }
 
 export interface GuaranteedQuality {
-  Workstation: number | null;
-  MFG: number | null;
-  Plant: number | null;
+  Workstation: Status;
+  Zone: Status;
+  Shop: Status;
+  Plant: Status;
 }
 
 export interface QAMatrixEntry {
@@ -100,8 +129,14 @@ export interface QAMatrixEntry {
   workstationStatus: Status;
   mfgStatus: Status;
   plantStatus: Status;
+  detectionFlags?: DetectionFlags;
+  recordedDefect?: RecordedDefectMetrics;
+  outsideProcess?: OutsideProcessArea;
+  implementationDate?: string;
+  auditDateName?: string;
   defectCode: string;
   defectLocationCode: string;
+  teamLeader?: string;
   mfgAction: string;
   resp: string;
   target: string;
