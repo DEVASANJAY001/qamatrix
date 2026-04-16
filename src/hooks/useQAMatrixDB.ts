@@ -103,6 +103,7 @@ function dbRowToEntry(row: any): QAMatrixEntry {
     teamLeader: row.team_leader || '',
     implementationDate: row.implementation_date || '',
     auditDateName: row.audit_date_name || '',
+    detectionDate: row.detection_date || '',
     detectionFlags: {
       repairTime: detectionFlags.repairTime ?? '',
       dvmPQG: detectionFlags.dvmPQG ?? '',
@@ -169,6 +170,7 @@ function entryToDbRow(entry: QAMatrixEntry) {
     team_leader: entry.teamLeader,
     implementation_date: entry.implementationDate,
     audit_date_name: entry.auditDateName,
+    detection_date: entry.detectionDate,
   };
 }
 
@@ -192,6 +194,41 @@ export function useQAMatrixDB() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'qa_matrix_entries',
+        },
+        (payload) => {
+          console.log('Real-time change received:', payload);
+          if (payload.eventType === 'INSERT') {
+            const newEntry = dbRowToEntry(payload.new);
+            setData(prev => {
+              if (prev.some(e => e.sNo === newEntry.sNo)) return prev;
+              return [...prev, newEntry].sort((a, b) => a.sNo - b.sNo);
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedEntry = dbRowToEntry(payload.new);
+            setData(prev => prev.map(e => e.sNo === updatedEntry.sNo ? updatedEntry : e));
+          } else if (payload.eventType === 'DELETE') {
+            const deletedSNo = payload.old.s_no;
+            setData(prev => prev.filter(e => e.sNo !== deletedSNo));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
 
   const saveEntry = useCallback(async (entry: QAMatrixEntry) => {
     const row = entryToDbRow(entry);

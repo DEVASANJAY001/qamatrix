@@ -186,15 +186,17 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
               {/* Row 1: Top level sections */}
               <tr>
                 <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-0" style={{ minWidth: 30 }}>S.no</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-1" style={{ minWidth: 36 }}>ER</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-2" style={{ minWidth: 42 }}>Station No.</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-3" style={{ minWidth: 55 }}>Zone/Team</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-4" style={{ minWidth: 55 }}>Team Leader</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-5" style={{ minWidth: 200, textAlign: 'left' }}>Failure Mode</th>
-                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-6" style={{ minWidth: 32 }}>Repair Time</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-1" style={{ minWidth: 80 }}>Detection Date</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-2" style={{ minWidth: 36 }}>ER</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-3" style={{ minWidth: 42 }}>Station No.</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-4" style={{ minWidth: 55 }}>Zone/Team</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-5" style={{ minWidth: 55 }}>Team Leader</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-6" style={{ minWidth: 150, textAlign: 'left' }}>Failure Mode</th>
+                <th rowSpan={3} className="hdr-label sqam-sticky-col sqam-sticky-col-7" style={{ minWidth: 32 }}>Repair Time</th>
 
                 {/* Detection date +24H */}
-                <th colSpan={6} className="hdr-main-24h sqam-sticky-col sqam-sticky-col-7">
+                <th colSpan={6} className="hdr-main-24h sqam-sticky-col sqam-sticky-col-8">
+
                   Detection date + 24H<br />
                   <small>Quality Plant ENG'g — Customer Protection Engineer [Dhakshna]</small>
                 </th>
@@ -222,12 +224,12 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
               {/* Row 2: Sub-sections */}
               <tr>
                 {/* Detection cols */}
-                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-7">DVM/PQG<br />(Y/N)</th>
-                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-8">DVR/DVT<br />(Y/N)</th>
-                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-9">Product Audit SCA (Y/N)</th>
-                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-10">WARRANTY</th>
-                <th rowSpan={2} className="hdr-def sqam-sticky-col sqam-sticky-col-11" style={{ background: '#FF0000', color: 'white' }}>Defect<br />Rating<br />(1/3/5)</th>
-                <th rowSpan={2} className="hdr-label sqam-sticky-col sqam-sticky-col-12">Reoccurrence<br />Broken<br />Clean Point</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-8">DVM/PQG<br />(Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-9">DVR/DVT<br />(Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-10">Product Audit SCA (Y/N)</th>
+                <th rowSpan={2} className="hdr-detection sqam-sticky-col sqam-sticky-col-11">WARRANTY</th>
+                <th rowSpan={2} className="hdr-def sqam-sticky-col sqam-sticky-col-12" style={{ background: '#FF0000', color: 'white' }}>Defect<br />Rating<br />(1/3/5)</th>
+                <th rowSpan={2} className="hdr-label sqam-sticky-col sqam-sticky-col-13">Reoccurrence<br />Broken<br />Clean Point</th>
 
                 {/* Station Area Headers */}
                 <th colSpan={11} className="hdr-trim focus:ring-0">TRIM</th>
@@ -279,19 +281,21 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
                     onClick={() => setExpandedRow(expandedRow === entry.sNo ? null : entry.sNo)}
                   >
                     <td className="data-row sqam-sticky-col sqam-sticky-col-0" style={{ fontWeight: 'bold' }}>{entry.sNo}</td>
-                    <td className="data-row col-er sqam-sticky-col sqam-sticky-col-1">{makeERBadge(entry.source)}</td>
-                    <td className="data-row col-stn sqam-sticky-col sqam-sticky-col-2">{entry.operationStation}</td>
-                    <td className="data-row col-zone sqam-sticky-col sqam-sticky-col-3" style={{ color: entry.designation.toLowerCase().includes('trim') ? '#1F4E79' : entry.designation.toLowerCase().includes('chassis') ? '#375623' : entry.designation.toLowerCase().includes('final') ? '#7F3F00' : 'inherit', fontWeight: 'bold' }}>{entry.designation}</td>
-                    <td className="data-row col-tl sqam-sticky-col sqam-sticky-col-4">{entry.teamLeader ?? entry.resp}</td>
-                    <td className="data-row col-fm sqam-sticky-col sqam-sticky-col-5" title={entry.concern}>{entry.concern}</td>
-                    <td className="data-row col-rt sqam-sticky-col sqam-sticky-col-6">{entry.detectionFlags?.repairTime ?? ""}</td>
+                    <td className="data-row text-center font-mono text-[10px] sqam-sticky-col sqam-sticky-col-1">{entry.detectionDate || "—"}</td>
+                    <td className="data-row col-er sqam-sticky-col sqam-sticky-col-2">{makeERBadge(entry.source)}</td>
+                    <td className="data-row col-stn sqam-sticky-col sqam-sticky-col-3">{entry.operationStation}</td>
+                    <td className="data-row col-zone sqam-sticky-col sqam-sticky-col-4" style={{ color: entry.designation.toLowerCase().includes('trim') ? '#1F4E79' : entry.designation.toLowerCase().includes('chassis') ? '#375623' : entry.designation.toLowerCase().includes('final') ? '#7F3F00' : 'inherit', fontWeight: 'bold' }}>{entry.designation}</td>
+                    <td className="data-row col-tl sqam-sticky-col sqam-sticky-col-5">{entry.teamLeader ?? entry.resp}</td>
+                    <td className="data-row col-fm sqam-sticky-col sqam-sticky-col-6" title={entry.concern}>{entry.concern}</td>
+                    <td className="data-row col-rt sqam-sticky-col sqam-sticky-col-7">{entry.detectionFlags?.repairTime ?? ""}</td>
 
-                    <td className="data-row sqam-sticky-col sqam-sticky-col-7" style={{ color: entry.detectionFlags?.dvmPQG === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvmPQG ?? ""}</td>
-                    <td className="data-row sqam-sticky-col sqam-sticky-col-8" style={{ color: entry.detectionFlags?.dvrDVT === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvrDVT ?? ""}</td>
-                    <td className="data-row sqam-sticky-col sqam-sticky-col-9" style={{ color: entry.detectionFlags?.productAuditSCA === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.productAuditSCA ?? ""}</td>
-                    <td className="data-row sqam-sticky-col sqam-sticky-col-10">{entry.detectionFlags?.warranty ?? ""}</td>
-                    <td className={`data-row sqam-sticky-col sqam-sticky-col-11 ${entry.defectRating === 1 ? 'def-1' : entry.defectRating === 3 ? 'def-3' : 'def-5'}`}>{entry.defectRating}</td>
-                    <td className="data-row col-reoc sqam-sticky-col sqam-sticky-col-12">{entry.detectionFlags?.reoccurrence ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-8" style={{ color: entry.detectionFlags?.dvmPQG === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvmPQG ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-9" style={{ color: entry.detectionFlags?.dvrDVT === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvrDVT ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-10" style={{ color: entry.detectionFlags?.productAuditSCA === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.productAuditSCA ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-11">{entry.detectionFlags?.warranty ?? ""}</td>
+                    <td className={`data-row sqam-sticky-col sqam-sticky-col-12 ${entry.defectRating === 1 ? 'def-1' : entry.defectRating === 3 ? 'def-3' : 'def-5'}`}>{entry.defectRating}</td>
+                    <td className="data-row col-reoc sqam-sticky-col sqam-sticky-col-13">{entry.detectionFlags?.reoccurrence ?? ""}</td>
+
 
                     {trimKeys.map(k => (
                       <td key={k} className="p-0 border-l border-border">

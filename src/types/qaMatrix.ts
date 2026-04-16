@@ -134,7 +134,9 @@ export interface QAMatrixEntry {
   outsideProcess?: OutsideProcessArea;
   implementationDate?: string;
   auditDateName?: string;
+  detectionDate?: string;
   defectCode: string;
+
   defectLocationCode: string;
   teamLeader?: string;
   mfgAction: string;

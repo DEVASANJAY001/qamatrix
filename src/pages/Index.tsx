@@ -69,8 +69,14 @@ const Index = () => {
     updateData(prev => prev.map(entry => {
       if (entry.sNo !== sNo) return entry;
       const newWeekly = [...entry.weeklyRecurrence];
+      const isIncrease = value > (newWeekly[weekIndex] || 0);
       newWeekly[weekIndex] = value;
-      return recalculateStatuses({ ...entry, weeklyRecurrence: newWeekly });
+      return recalculateStatuses({
+        ...entry,
+        weeklyRecurrence: newWeekly,
+        detectionDate: isIncrease ? new Date().toLocaleDateString('en-GB') : entry.detectionDate
+      });
+
     }));
   };
 
@@ -376,7 +382,12 @@ const Index = () => {
         before: oldW1,
         after: newW1,
       });
-      const updated = recalculateStatuses({ ...entry, weeklyRecurrence: newWeekly });
+      const updated = recalculateStatuses({
+        ...entry,
+        weeklyRecurrence: newWeekly,
+        detectionDate: m.repeatCount > 0 ? new Date().toLocaleDateString('en-GB') : entry.detectionDate
+      });
+
       if (entry.workstationStatus !== updated.workstationStatus) {
         diffs.push({ sNo: entry.sNo, concern: entry.concern, field: "WS Status", before: entry.workstationStatus, after: updated.workstationStatus });
       }

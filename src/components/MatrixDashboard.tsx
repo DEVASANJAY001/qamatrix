@@ -247,10 +247,11 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
     const d = filtered;
 
     const statusDonuts: DonutItem[] = [
-      mkDonut("WS", d, (e) => e.workstationStatus === "OK", "status", "WS"),
-      mkDonut("MFG", d, (e) => e.mfgStatus === "OK", "status", "MFG"),
-      mkDonut("PLANT", d, (e) => e.plantStatus === "OK", "status", "PLANT"),
+      mkDonut("WS", d, (e) => e.guaranteedQuality?.Workstation === "OK", "status", "WS"),
+      mkDonut("MFG", d, (e) => e.guaranteedQuality?.Shop === "OK", "status", "MFG"),
+      mkDonut("PLANT", d, (e) => e.guaranteedQuality?.Plant === "OK", "status", "PLANT"),
     ];
+
     const statusBar = statusDonuts.map((s) => ({ name: s.label, OK: s.ok, NG: s.ng }));
 
     const areas = ["TRIM", "CHASSIS", "FINAL"] as const;
@@ -289,9 +290,9 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
 
       if (item.filterType === "status") {
         const okFn = (e: QAMatrixEntry) =>
-          item.filterValue === "WS" ? e.workstationStatus === "OK" :
-            item.filterValue === "MFG" ? e.mfgStatus === "OK" :
-              e.plantStatus === "OK";
+          item.filterValue === "WS" ? e.guaranteedQuality?.Workstation === "OK" :
+            item.filterValue === "MFG" ? e.guaranteedQuality?.Shop === "OK" :
+              e.guaranteedQuality?.Plant === "OK";
         entries = type === "ok" ? d.filter(okFn) : d.filter((e) => !okFn(e));
       } else if (item.filterType === "area") {
         const areaEntries = d.filter((e) => e.designation.toUpperCase() === item.filterValue);
@@ -327,9 +328,9 @@ const MatrixDashboard = ({ data, onFilterByCategory }: MatrixDashboardProps) => 
 
       if (sectionType === "status") {
         const okFn = (e: QAMatrixEntry) =>
-          label === "WS" ? e.workstationStatus === "OK" :
-            label === "MFG" ? e.mfgStatus === "OK" :
-              e.plantStatus === "OK";
+          label === "WS" ? e.guaranteedQuality?.Workstation === "OK" :
+            label === "MFG" ? e.guaranteedQuality?.Shop === "OK" :
+              e.guaranteedQuality?.Plant === "OK";
         if (cellType === "total") entries = d;
         else if (cellType === "ok") entries = d.filter(okFn);
         else entries = d.filter((e) => !okFn(e));
