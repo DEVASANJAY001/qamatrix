@@ -91,10 +91,26 @@ const Index = () => {
   const handleFieldUpdate = (sNo: number, field: string, value: string) => {
     updateData(prev => prev.map(entry => {
       if (entry.sNo !== sNo) return entry;
+
+      if (field === "sNo") {
+        return { ...entry, sNo: parseInt(value) || entry.sNo };
+      }
+
       if (field === "defectRating") {
         const newRating = Number(value) as 1 | 3 | 5;
         return recalculateStatuses({ ...entry, defectRating: newRating });
       }
+
+      if (field === "repairTime") {
+        return {
+          ...entry,
+          detectionFlags: {
+            ...entry.detectionFlags,
+            repairTime: value
+          }
+        };
+      }
+
       return { ...entry, [field]: value };
     }));
   };

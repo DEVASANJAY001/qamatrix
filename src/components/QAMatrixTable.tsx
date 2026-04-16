@@ -59,6 +59,16 @@ const ScoreInput = ({ value, onChange, defectRating, type, readOnly }: { value: 
   />
 );
 
+const InlineEditInput = ({ value, onChange, className = "", style = {} }: { value: string; onChange: (v: string) => void; className?: string; style?: React.CSSProperties }) => (
+  <input
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    onClick={(e) => e.stopPropagation()}
+    className={`w-full h-full bg-primary/5 border-0 focus:ring-1 focus:ring-primary outline-none text-center px-1 py-0.5 ${className}`}
+    style={{ fontSize: '9px', ...style }}
+  />
+);
+
 const makeYNCell = (val: string | undefined) => {
   if (!val) return <td className="data-row"></td>;
   return (
@@ -280,14 +290,62 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
                       }`}
                     onClick={() => setExpandedRow(expandedRow === entry.sNo ? null : entry.sNo)}
                   >
-                    <td className="data-row sqam-sticky-col sqam-sticky-col-0" style={{ fontWeight: 'bold' }}>{entry.sNo}</td>
-                    <td className="data-row text-center font-mono text-[10px] sqam-sticky-col sqam-sticky-col-1">{entry.detectionDate || "—"}</td>
-                    <td className="data-row col-er sqam-sticky-col sqam-sticky-col-2">{makeERBadge(entry.source)}</td>
-                    <td className="data-row col-stn sqam-sticky-col sqam-sticky-col-3">{entry.operationStation}</td>
-                    <td className="data-row col-zone sqam-sticky-col sqam-sticky-col-4" style={{ color: entry.designation.toLowerCase().includes('trim') ? '#1F4E79' : entry.designation.toLowerCase().includes('chassis') ? '#375623' : entry.designation.toLowerCase().includes('final') ? '#7F3F00' : 'inherit', fontWeight: 'bold' }}>{entry.designation}</td>
-                    <td className="data-row col-tl sqam-sticky-col sqam-sticky-col-5">{entry.teamLeader ?? entry.resp}</td>
-                    <td className="data-row col-fm sqam-sticky-col sqam-sticky-col-6" title={entry.concern}>{entry.concern}</td>
-                    <td className="data-row col-rt sqam-sticky-col sqam-sticky-col-7">{entry.detectionFlags?.repairTime ?? ""}</td>
+                    <td className="data-row sqam-sticky-col sqam-sticky-col-0" style={{ fontWeight: 'bold' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.sNo ?? ""} onChange={(v) => setEditFields(f => ({ ...f, sNo: v }))} style={{ minWidth: 30 }} />
+                      ) : (
+                        entry.sNo
+                      )}
+                    </td>
+                    <td className="data-row text-center font-mono text-[10px] sqam-sticky-col sqam-sticky-col-1" style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.detectionDate ?? ""} onChange={(v) => setEditFields(f => ({ ...f, detectionDate: v }))} style={{ minWidth: 80 }} />
+                      ) : (
+                        entry.detectionDate || "—"
+                      )}
+                    </td>
+                    <td className="data-row col-er sqam-sticky-col sqam-sticky-col-2" style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.source ?? ""} onChange={(v) => setEditFields(f => ({ ...f, source: v }))} style={{ minWidth: 36 }} />
+                      ) : (
+                        makeERBadge(entry.source)
+                      )}
+                    </td>
+                    <td className="data-row col-stn sqam-sticky-col sqam-sticky-col-3" style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.operationStation ?? ""} onChange={(v) => setEditFields(f => ({ ...f, operationStation: v }))} style={{ minWidth: 42 }} />
+                      ) : (
+                        entry.operationStation
+                      )}
+                    </td>
+                    <td className="data-row col-zone sqam-sticky-col sqam-sticky-col-4" style={{ color: entry.designation.toLowerCase().includes('trim') ? '#1F4E79' : entry.designation.toLowerCase().includes('chassis') ? '#375623' : entry.designation.toLowerCase().includes('final') ? '#7F3F00' : 'inherit', fontWeight: 'bold', padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.designation ?? ""} onChange={(v) => setEditFields(f => ({ ...f, designation: v }))} style={{ minWidth: 55 }} />
+                      ) : (
+                        entry.designation
+                      )}
+                    </td>
+                    <td className="data-row col-tl sqam-sticky-col sqam-sticky-col-5" style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.teamLeader ?? ""} onChange={(v) => setEditFields(f => ({ ...f, teamLeader: v }))} style={{ minWidth: 55 }} />
+                      ) : (
+                        entry.teamLeader ?? entry.resp
+                      )}
+                    </td>
+                    <td className="data-row col-fm sqam-sticky-col sqam-sticky-col-6" title={entry.concern} style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.concern ?? ""} onChange={(v) => setEditFields(f => ({ ...f, concern: v }))} className="text-left" style={{ minWidth: 150 }} />
+                      ) : (
+                        entry.concern
+                      )}
+                    </td>
+                    <td className="data-row col-rt sqam-sticky-col sqam-sticky-col-7" style={{ padding: editingRow === entry.sNo ? 0 : '0 4px' }}>
+                      {editingRow === entry.sNo ? (
+                        <InlineEditInput value={editFields.repairTime ?? ""} onChange={(v) => setEditFields(f => ({ ...f, repairTime: v }))} style={{ minWidth: 32 }} />
+                      ) : (
+                        entry.detectionFlags?.repairTime ?? ""
+                      )}
+                    </td>
 
                     <td className="data-row sqam-sticky-col sqam-sticky-col-8" style={{ color: entry.detectionFlags?.dvmPQG === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvmPQG ?? ""}</td>
                     <td className="data-row sqam-sticky-col sqam-sticky-col-9" style={{ color: entry.detectionFlags?.dvrDVT === 'Y' ? '#1B5E20' : '#B71C1C', fontWeight: 'bold' }}>{entry.detectionFlags?.dvrDVT ?? ""}</td>
@@ -377,7 +435,7 @@ const QAMatrixTable = ({ data, filter, onClearFilter, onWeeklyUpdate, onScoreUpd
                             {editingRow === entry.sNo ? (
                               <button onClick={() => { Object.entries(editFields).forEach(([field, value]) => { onFieldUpdate?.(entry.sNo, field, value); }); setEditingRow(null); setEditFields({}); }} className="p-1 rounded hover:bg-primary/10 text-primary" title="Save"><Check className="w-3.5 h-3.5" /></button>
                             ) : (
-                              <button onClick={() => { setEditingRow(entry.sNo); setEditFields({ source: entry.source, operationStation: entry.operationStation, designation: entry.designation, teamLeader: entry.teamLeader ?? entry.resp, concern: entry.concern, defectCode: entry.defectCode, defectLocationCode: entry.defectLocationCode, mfgAction: entry.mfgAction, resp: entry.resp, target: entry.target }); }} className="p-1 rounded hover:bg-primary/10 text-muted-foreground" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => { setEditingRow(entry.sNo); setEditFields({ sNo: entry.sNo.toString(), detectionDate: entry.detectionDate || "", repairTime: entry.detectionFlags?.repairTime || "", source: entry.source, operationStation: entry.operationStation, designation: entry.designation, teamLeader: entry.teamLeader ?? entry.resp, concern: entry.concern, defectCode: entry.defectCode, defectLocationCode: entry.defectLocationCode, mfgAction: entry.mfgAction, resp: entry.resp, target: entry.target }); }} className="p-1 rounded hover:bg-primary/10 text-muted-foreground" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
                             )}
                             <button onClick={() => { if (confirm(`Delete concern #${entry.sNo}?`)) { onDeleteEntry?.(entry.sNo); } }} className="p-1 rounded hover:bg-destructive/10 text-destructive" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                           </>
