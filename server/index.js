@@ -416,4 +416,4 @@ if (process.env.NODE_ENV !== 'production') {
         console.log(`Server running on port ${port}`);
     });
 }
-module.exports = app;
+export default app;
