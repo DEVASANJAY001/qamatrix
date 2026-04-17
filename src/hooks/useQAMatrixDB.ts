@@ -174,22 +174,30 @@ export function useQAMatrixDB() {
     setLoading(true);
     try {
       const response = await fetch('/api/qa-matrix');
-      const rows = await response.json();
-      if (response.ok) {
-        console.log(`Fetched ${rows.length} rows from API`);
-        const mapped = (rows || []).map((row: any, idx: number) => {
-          try {
-            return dbRowToEntry(row);
-          } catch (e) {
-            console.error(`Error mapping row at index ${idx}:`, e, row);
-            return null;
-          }
-        }).filter(Boolean) as QAMatrixEntry[];
-        console.log(`Successfully mapped ${mapped.length} entries`);
-        setData(mapped);
-      } else {
-        throw new Error(rows.error || "Failed to load QA matrix");
+      const contentType = response.headers.get('content-type');
+      
+      if (!response.ok) {
+        throw new Error(`Server returned ${response.status} ${response.statusText}`);
       }
+
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Expected JSON but got ${contentType}. Server might be restarting. Response: ${text.substring(0, 50)}...`);
+      }
+
+      const rows = await response.json();
+      console.log(`Fetched ${rows.length} rows from API`);
+      const mapped = (rows || []).map((row: any, idx: number) => {
+        try {
+          return dbRowToEntry(row);
+        } catch (e) {
+          console.error(`Error mapping row at index ${idx}:`, e, row);
+          return null;
+        }
+      }).filter(Boolean) as QAMatrixEntry[];
+      
+      console.log(`Successfully mapped ${mapped.length} entries`);
+      setData(mapped);
     } catch (error: any) {
       console.error("Failed to load QA matrix:", error);
       toast({ title: "Load Error", description: error.message, variant: "destructive" });
@@ -198,6 +206,7 @@ export function useQAMatrixDB() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
 
   const saveEntry = useCallback(async (entry: QAMatrixEntry) => {
     try {
