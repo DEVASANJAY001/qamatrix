@@ -5,7 +5,6 @@ import { parseDVXSheet } from "@/utils/dvxParser";
 import { recalculateStatuses } from "@/utils/qaCalculations";
 import { exportToXLSX } from "@/utils/xlsxExport";
 import { fetchWorkbookFromUrl, isGoogleSheetsUrl } from "@/utils/googleSheetsImport";
-import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "@/components/Dashboard";
 import MatrixDashboard from "@/components/MatrixDashboard";
 import QAMatrixTable from "@/components/QAMatrixTable";
@@ -77,13 +76,14 @@ const RepeatsTab = ({
   // Fetch last updated dates
   useEffect(() => {
     const fetchDates = async () => {
-      const { data: defectData } = await supabase
-        .from("final_defect")
-        .select("created_at")
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (defectData && defectData.length > 0) {
-        setLastDefectUpdate(defectData[0].created_at);
+      try {
+        const res = await fetch('/api/final-defect');
+        const defectData = await res.json();
+        if (res.ok && defectData && defectData.length > 0) {
+          setLastDefectUpdate(defectData[0].created_at);
+        }
+      } catch (err) {
+        console.error("Fetch dates error:", err);
       }
     };
     fetchDates();
@@ -94,32 +94,32 @@ const RepeatsTab = ({
   const handleStartPairing = async () => {
     setPairingLoading(true);
     try {
-      let query = supabase
-        .from("final_defect")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const res = await fetch('/api/final-defect');
+      const finalDefects = await res.json();
+      if (!res.ok) throw new Error(finalDefects.error || "Failed to fetch defect data");
 
-      if (matchStartDate) {
-        query = query.gte("created_at", matchStartDate);
-      }
-      if (matchEndDate) {
-        const end = new Date(matchEndDate);
-        end.setHours(23, 59, 59, 999);
-        query = query.lte("created_at", end.toISOString());
-      }
-
-      const { data: finalDefects, error } = await query;
-
-      if (error) throw error;
       if (!finalDefects || finalDefects.length === 0) {
         toast({ title: "No defect data", description: "Upload defect data first in the Defect Data page.", variant: "destructive" });
         setPairingLoading(false);
         return;
       }
 
-      const entries: DVXEntry[] = finalDefects.sort((a, b) => {
-        const dateA = new Date((a as any).uploaded_at || (a as any).created_at || 0).getTime();
-        const dateB = new Date((b as any).uploaded_at || (b as any).created_at || 0).getTime();
+      // Filter by date range if specified
+      let filteredDefects = finalDefects;
+      if (matchStartDate) {
+        const start = new Date(matchStartDate).getTime();
+        filteredDefects = filteredDefects.filter((d: any) => new Date(d.created_at).getTime() >= start);
+      }
+      if (matchEndDate) {
+        const end = new Date(matchEndDate);
+        end.setHours(23, 59, 59, 999);
+        const endTime = end.getTime();
+        filteredDefects = filteredDefects.filter((d: any) => new Date(d.created_at).getTime() <= endTime);
+      }
+
+      const entries: DVXEntry[] = filteredDefects.sort((a: any, b: any) => {
+        const dateA = new Date(a.uploaded_at || a.created_at || 0).getTime();
+        const dateB = new Date(b.uploaded_at || b.created_at || 0).getTime();
         return dateB - dateA;
       }).map((d: any) => ({
         date: new Date(d.created_at).toLocaleDateString(),
@@ -128,7 +128,7 @@ const RepeatsTab = ({
         defectCode: d.defect_code || "",
         defectDescription: d.defect_description_details?.split(" ").slice(0, 5).join(" ") || "",
         defectDescriptionDetails: d.defect_description_details || "",
-        gravity: "",
+        gravity: d.gravity || "",
         quantity: 1,
         source: d.source || "",
         responsible: "",
@@ -150,29 +150,29 @@ const RepeatsTab = ({
     setPairingMode("code");
     setPairingLoading(true);
     try {
-      let query = supabase
-        .from("final_defect")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const res = await fetch('/api/final-defect');
+      const finalDefects = await res.json();
+      if (!res.ok) throw new Error(finalDefects.error || "Failed to fetch defect data");
 
-      if (matchStartDate) {
-        query = query.gte("created_at", matchStartDate);
-      }
-      if (matchEndDate) {
-        const end = new Date(matchEndDate);
-        end.setHours(23, 59, 59, 999);
-        query = query.lte("created_at", end.toISOString());
-      }
-
-      const { data: finalDefects, error } = await query;
-
-      if (error) throw error;
       if (!finalDefects || finalDefects.length === 0) {
         toast({ title: "No defect data", description: "Upload defect data first in the Defect Data page.", variant: "destructive" });
         return;
       }
 
-      const entries: DVXEntry[] = finalDefects.map((d: any) => ({
+      // Filter by date range if specified
+      let filteredDefects = finalDefects;
+      if (matchStartDate) {
+        const start = new Date(matchStartDate).getTime();
+        filteredDefects = filteredDefects.filter((d: any) => new Date(d.created_at).getTime() >= start);
+      }
+      if (matchEndDate) {
+        const end = new Date(matchEndDate);
+        end.setHours(23, 59, 59, 999);
+        const endTime = end.getTime();
+        filteredDefects = filteredDefects.filter((d: any) => new Date(d.created_at).getTime() <= endTime);
+      }
+
+      const entries: DVXEntry[] = filteredDefects.map((d: any) => ({
         date: new Date(d.created_at).toLocaleDateString(),
         locationCode: d.defect_location_code || "",
         locationDetails: d.defect_location_code || "",
@@ -202,9 +202,9 @@ const RepeatsTab = ({
     setPairingMode("semantic");
     setPairingLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("pair-by-semantic");
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const response = await fetch('/api/pair-by-semantic', { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "AI pairing failed");
       toast({
         title: "Semantic AI Pairing Complete",
         description: `${data.paired} paired, ${data.unpaired} not paired`,

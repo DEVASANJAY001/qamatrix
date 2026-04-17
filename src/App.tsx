@@ -8,6 +8,7 @@ import DefectUpload from "./pages/DefectUpload";
 import HowItWorks from "./pages/HowItWorks";
 import ReoccurrenceData from "./pages/ReoccurrenceData";
 import DefectDashboard from "./pages/DefectDashboard";
+import Glidepath from "./pages/Glidepath";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -23,6 +24,7 @@ const App = () => (
           <Route path="/defect-upload" element={<DefectUpload />} />
           <Route path="/reoccurrence-history" element={<ReoccurrenceData />} />
           <Route path="/defect-dashboard" element={<DefectDashboard />} />
+          <Route path="/glidepath" element={<Glidepath />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

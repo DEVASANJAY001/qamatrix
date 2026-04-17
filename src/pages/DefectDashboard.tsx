@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
     ArrowLeft, BarChart3, Calendar, Search, Filter,
@@ -48,23 +47,19 @@ const DefectDashboard = () => {
         setLoading(true);
         try {
             // 1. Fetch from defect_data (SCA, YARD, DVX legacy)
-            const { data: dd, error: e1 } = await supabase
-                .from("defect_data")
-                .select("*")
-                .order("uploaded_at", { ascending: false });
+            const res1 = await fetch('/api/defect-data');
+            const dd = await res1.json();
+            if (!res1.ok) throw new Error(dd.error || "Failed to fetch defect_data");
 
             // 2. Fetch from dvx_defects (New DVX reports)
-            const { data: dvx, error: e2 } = await supabase
-                .from("dvx_defects")
-                .select("*")
-                .order("created_at", { ascending: false });
-
-            if (e1 || e2) throw e1 || e2;
+            const res2 = await fetch('/api/dvx-defects');
+            const dvx = await res2.json();
+            if (!res2.ok) throw new Error(dvx.error || "Failed to fetch dvx_defects");
 
             // Unify data structures
             const unified: DefectEntry[] = [
-                ...(dd || []).map(item => ({ ...item, source: item.source || "Unknown" })),
-                ...(dvx || []).map(item => ({
+                ...(dd || []).map((item: any) => ({ ...item, source: item.source || "Unknown" })),
+                ...(dvx || []).map((item: any) => ({
                     ...item,
                     uploaded_at: item.created_at,
                     defect_location_code: item.location_code,

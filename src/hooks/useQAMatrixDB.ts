@@ -1,8 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { QAMatrixEntry } from "@/types/qaMatrix";
 import { toast } from "@/hooks/use-toast";
-import { Json } from "@/integrations/supabase/types";
 
 function dbRowToEntry(row: any): QAMatrixEntry {
   const trim = (row.trim || {}) as any;
@@ -15,7 +13,19 @@ function dbRowToEntry(row: any): QAMatrixEntry {
   const recordedDefect = (row.recorded_defect || {}) as any;
   const detectionFlags = (row.detection_flags || {}) as any;
   const outsideProcess = (row.outside_process || {}) as any;
-  const weeklyRecurrence = (row.weekly_recurrence || [0, 0, 0, 0, 0, 0]) as number[];
+  let rawWeekly = row.weekly_recurrence;
+  if (typeof rawWeekly === 'string') {
+    try {
+      if (rawWeekly.startsWith('{') && rawWeekly.endsWith('}')) {
+        rawWeekly = JSON.parse('[' + rawWeekly.substring(1, rawWeekly.length - 1) + ']');
+      } else {
+        rawWeekly = JSON.parse(rawWeekly);
+      }
+    } catch (e) {
+      rawWeekly = [0, 0, 0, 0, 0, 0];
+    }
+  }
+  const weeklyRecurrence = (Array.isArray(rawWeekly) ? rawWeekly : [0, 0, 0, 0, 0, 0]) as number[];
 
   return {
     sNo: row.s_no,
@@ -120,24 +130,6 @@ function sanitizeNum(n: any): number {
   return isNaN(n) ? 0 : n;
 }
 
-function sanitizeObject(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitizeObject);
-
-  const result: any = {};
-  for (const key in obj) {
-    const val = obj[key];
-    if (typeof val === 'number') {
-      result[key] = isNaN(val) ? 0 : val;
-    } else if (typeof val === 'object' && val !== null) {
-      result[key] = sanitizeObject(val);
-    } else {
-      result[key] = val;
-    }
-  }
-  return result;
-}
-
 function entryToDbRow(entry: QAMatrixEntry) {
   return {
     s_no: sanitizeNum(entry.sNo),
@@ -147,18 +139,18 @@ function entryToDbRow(entry: QAMatrixEntry) {
     concern: entry.concern,
     defect_rating: sanitizeNum(entry.defectRating) || 1,
     recurrence: sanitizeNum(entry.recurrence),
-    weekly_recurrence: (entry.weeklyRecurrence || [0, 0, 0, 0, 0, 0]).map(sanitizeNum) as unknown as Json,
+    weekly_recurrence: (entry.weeklyRecurrence || [0, 0, 0, 0, 0, 0]).map(sanitizeNum),
     recurrence_count_plus_defect: sanitizeNum(entry.recurrenceCountPlusDefect),
-    trim: sanitizeObject(entry.trim) as unknown as Json,
-    chassis: sanitizeObject(entry.chassis) as unknown as Json,
-    final: sanitizeObject(entry.final) as unknown as Json,
-    q_control: sanitizeObject(entry.qControl) as unknown as Json,
-    q_control_detail: sanitizeObject(entry.qControlDetail) as unknown as Json,
-    control_rating: sanitizeObject(entry.controlRating) as unknown as Json,
-    guaranteed_quality: sanitizeObject(entry.guaranteedQuality) as unknown as Json,
-    recorded_defect: sanitizeObject(entry.recordedDefect) as unknown as Json,
-    outside_process: sanitizeObject(entry.outsideProcess) as unknown as Json,
-    detection_flags: sanitizeObject(entry.detectionFlags) as unknown as Json,
+    trim: entry.trim,
+    chassis: entry.chassis,
+    final: entry.final,
+    q_control: entry.qControl,
+    q_control_detail: entry.qControlDetail,
+    control_rating: entry.controlRating,
+    guaranteed_quality: entry.guaranteedQuality,
+    recorded_defect: entry.recordedDefect,
+    outside_process: entry.outsideProcess,
+    detection_flags: entry.detectionFlags,
     workstation_status: entry.workstationStatus,
     mfg_status: entry.mfgStatus,
     plant_status: entry.plantStatus,
@@ -180,183 +172,152 @@ export function useQAMatrixDB() {
 
   const fetchData = useCallback(async () => {
     setLoading(true);
-    const { data: rows, error } = await supabase
-      .from("qa_matrix_entries")
-      .select("*")
-      .order("s_no", { ascending: true });
-    if (error) {
+    try {
+      const response = await fetch('/api/qa-matrix');
+      const rows = await response.json();
+      if (response.ok) {
+        console.log(`Fetched ${rows.length} rows from API`);
+        const mapped = (rows || []).map((row: any, idx: number) => {
+          try {
+            return dbRowToEntry(row);
+          } catch (e) {
+            console.error(`Error mapping row at index ${idx}:`, e, row);
+            return null;
+          }
+        }).filter(Boolean) as QAMatrixEntry[];
+        console.log(`Successfully mapped ${mapped.length} entries`);
+        setData(mapped);
+      } else {
+        throw new Error(rows.error || "Failed to load QA matrix");
+      }
+    } catch (error: any) {
       console.error("Failed to load QA matrix:", error);
       toast({ title: "Load Error", description: error.message, variant: "destructive" });
-    } else {
-      setData((rows || []).map(dbRowToEntry));
     }
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'qa_matrix_entries',
-        },
-        (payload) => {
-          console.log('Real-time change received:', payload);
-          if (payload.eventType === 'INSERT') {
-            const newEntry = dbRowToEntry(payload.new);
-            setData(prev => {
-              if (prev.some(e => e.sNo === newEntry.sNo)) return prev;
-              return [...prev, newEntry].sort((a, b) => a.sNo - b.sNo);
-            });
-          } else if (payload.eventType === 'UPDATE') {
-            const updatedEntry = dbRowToEntry(payload.new);
-            setData(prev => prev.map(e => e.sNo === updatedEntry.sNo ? updatedEntry : e));
-          } else if (payload.eventType === 'DELETE') {
-            const deletedSNo = payload.old.s_no;
-            setData(prev => prev.filter(e => e.sNo !== deletedSNo));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-
   const saveEntry = useCallback(async (entry: QAMatrixEntry) => {
-    const row = entryToDbRow(entry);
-    const { error } = await supabase
-      .from("qa_matrix_entries")
-      .upsert(row, { onConflict: "s_no" });
-    if (error) {
+    try {
+      const row = entryToDbRow(entry);
+      const response = await fetch('/api/qa-matrix/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(row)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Save failed");
+    } catch (error: any) {
       console.error("Save error:", error);
       toast({ title: "Save Error", description: error.message, variant: "destructive" });
     }
   }, []);
 
   const saveMultiple = useCallback(async (entries: QAMatrixEntry[]) => {
-    const rows = entries.map(entryToDbRow);
-    const { error } = await supabase
-      .from("qa_matrix_entries")
-      .upsert(rows, { onConflict: "s_no" });
-    if (error) {
+    try {
+      const rows = entries.map(entryToDbRow);
+      const response = await fetch('/api/qa-matrix/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(rows)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Batch save failed");
+    } catch (error: any) {
       console.error("Batch save error:", error);
       toast({ title: "Save Error", description: error.message, variant: "destructive" });
     }
   }, []);
 
   const deleteEntry = useCallback(async (sNo: number) => {
-    const { error } = await supabase
-      .from("qa_matrix_entries")
-      .delete()
-      .eq("s_no", sNo);
-    if (error) {
+    try {
+      const response = await fetch(`/api/qa-matrix/${sNo}`, { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Delete failed");
+    } catch (error: any) {
       console.error("Delete error:", error);
       toast({ title: "Delete Error", description: error.message, variant: "destructive" });
     }
   }, []);
 
   const deleteAll = useCallback(async () => {
-    const { error } = await supabase
-      .from("qa_matrix_entries")
-      .delete()
-      .neq("s_no", -9999); // delete all rows
-    if (error) {
+    try {
+      const response = await fetch('/api/qa-matrix', { method: 'DELETE' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Delete all failed");
+      setData([]);
+      return true;
+    } catch (error: any) {
       console.error("Delete all error:", error);
       toast({ title: "Delete Error", description: error.message, variant: "destructive" });
       return false;
     }
-    setData([]);
-    return true;
   }, []);
 
   const updateData = useCallback((updater: (prev: QAMatrixEntry[]) => QAMatrixEntry[]) => {
     setData(prev => {
       const next = updater(prev);
-      // Find changed entries and save them
       const changed = next.filter(n => {
         const old = prev.find(p => p.sNo === n.sNo);
         return !old || JSON.stringify(old) !== JSON.stringify(n);
       });
       if (changed.length > 0) {
-        const rows = changed.map(entryToDbRow);
-        supabase.from("qa_matrix_entries").upsert(rows, { onConflict: "s_no" }).then(({ error }) => {
-          if (error) console.error("Auto-save error:", error);
-        });
+        saveMultiple(changed);
       }
       return next;
     });
-  }, []);
+  }, [saveMultiple]);
 
   const saveSnapshot = useCallback(async (currentData: QAMatrixEntry[]) => {
-    const { error } = await (supabase as any)
-      .from("qa_matrix_snapshots")
-      .upsert({
-        snapshot_date: new Date().toISOString().split('T')[0],
-        data: currentData as unknown as Json
-      }, { onConflict: "snapshot_date" });
-
-    if (error) {
+    try {
+      const response = await fetch('/api/snapshots', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          snapshot_date: new Date().toISOString().split('T')[0],
+          data: currentData
+        })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Snapshot save failed");
+      toast({ title: "Snapshot Saved", description: "Current matrix state has been archived for today." });
+      return true;
+    } catch (error: any) {
       console.error("Snapshot save error:", error);
       toast({ title: "Snapshot Error", description: error.message, variant: "destructive" });
       return false;
     }
-    toast({ title: "Snapshot Saved", description: "Current matrix state has been archived for today." });
-    return true;
   }, []);
 
   const getSnapshots = useCallback(async () => {
-    const { data: rows, error } = await (supabase as any)
-      .from("qa_matrix_snapshots")
-      .select("snapshot_date")
-      .order("snapshot_date", { ascending: false }) as any;
-
-    if (error) {
+    try {
+      const response = await fetch('/api/snapshots');
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Fetch snapshots failed");
+      return data;
+    } catch (error: any) {
       console.error("Fetch snapshots error:", error);
       return [];
     }
-    return rows.map(r => r.snapshot_date);
   }, []);
 
   const getSnapshotData = useCallback(async (date: string) => {
-    const { data: row, error } = await (supabase as any)
-      .from("qa_matrix_snapshots")
-      .select("data")
-      .eq("snapshot_date", date)
-      .single() as any;
-
-    if (error) {
+    try {
+      const response = await fetch(`/api/snapshots/${date}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Fetch snapshot data failed");
+      return data;
+    } catch (error: any) {
       console.error("Fetch snapshot data error:", error);
       return null;
     }
-    return row.data as unknown as QAMatrixEntry[];
-  }, []);
-
-  const getSnapshotRangeData = useCallback(async (startDate: string, endDate: string) => {
-    const { data: rows, error } = await (supabase as any)
-      .from("qa_matrix_snapshots")
-      .select("data")
-      .gte("snapshot_date", startDate)
-      .lte("snapshot_date", endDate)
-      .order("snapshot_date", { ascending: true }) as any;
-
-    if (error) {
-      console.error("Fetch range snapshots error:", error);
-      return [];
-    }
-    return (rows || []).map(r => r.data as unknown as QAMatrixEntry[]);
   }, []);
 
   return {
     data, loading, setData, updateData, fetchData,
     saveEntry, saveMultiple, deleteEntry, deleteAll,
-    saveSnapshot, getSnapshots, getSnapshotData, getSnapshotRangeData
+    saveSnapshot, getSnapshots, getSnapshotData
   };
 }

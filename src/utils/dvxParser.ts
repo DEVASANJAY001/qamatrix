@@ -50,15 +50,15 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
   // Find columns - use exact name first for "Defect Description" vs "Defect Description Details"
   const dateCol = findCol(headers, "Date");
   const locationCodeCol = findCol(headers, "Location Code", "Loc Code", "location code", "loc code");
-  const locationCol = findCol(headers, "Location Details", "Location");
-  const codeCol = findCol(headers, "Defect Code");
+  const locationCol = findCol(headers, "Location Details", "Location", "Loc");
+  const codeCol = findCol(headers, "Defect Code", "Code");
   // For description vs details: match exact first to avoid collision
   const descCol = headers.indexOf("defect description") !== -1
     ? headers.indexOf("defect description")
-    : findCol(headers, "Defect Description");
-  const detailsCol = findCol(headers, "Defect Description Details");
-  const gravityCol = findCol(headers, "Gravity");
-  const qtyCol = findCol(headers, "Quantity");
+    : findCol(headers, "Defect Description", "Description", "Desc");
+  const detailsCol = findCol(headers, "Defect Description Details", "Details");
+  const gravityCol = findCol(headers, "Gravity", "Grav");
+  const qtyCol = findCol(headers, "Quantity", "Qty", "Count");
   const sourceCol = findCol(headers, "Source");
   const respCol = findCol(headers, "Responsible");
   const pofFamilyCol = findCol(headers, "POF Family");

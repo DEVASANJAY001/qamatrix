@@ -207,13 +207,18 @@ const Index = () => {
       }
     });
 
+    // Filter out "junk" unmatched rows that have no code and no description
+    const filteredUnmatched = unmatchedList.filter(u =>
+      u.dvxEntry.defectCode || u.dvxEntry.defectDescription || u.dvxEntry.defectDescriptionDetails
+    );
+
     const matchedArr = Array.from(matchMap.values()).sort((a, b) => b.repeatCount - a.repeatCount);
     setMatched(matchedArr);
-    setUnmatched(unmatchedList);
+    setUnmatched(filteredUnmatched);
     setIsRepeatApplied(false);
     setPreApplySnapshot(null);
     setDiffEntries([]);
-    toast({ title: "Code Matching Complete", description: `${matchedArr.length} concerns paired, ${unmatchedList.length} unmatched` });
+    toast({ title: "Code Matching Complete", description: `${matchedArr.length} concerns paired, ${filteredUnmatched.length} unmatched` });
   }, []);
 
   // AI/Semantic matching
@@ -254,18 +259,25 @@ const Index = () => {
         }
       });
 
+      // Filter out "junk" unmatched rows that have no code and no description
+      const filteredUnmatched = unmatchedList.filter(u =>
+        u.dvxEntry.defectCode || u.dvxEntry.defectDescription || u.dvxEntry.defectDescriptionDetails
+      );
+
       const matchedArr = Array.from(matchMap.values()).sort((a, b) => b.repeatCount - a.repeatCount);
       setMatched(matchedArr);
-      setUnmatched(unmatchedList);
+      setUnmatched(filteredUnmatched);
       setIsRepeatApplied(false);
       setPreApplySnapshot(null);
       setDiffEntries([]);
-      toast({ title: "AI Matching Complete", description: `${matchedArr.length} concerns paired, ${unmatchedList.length} unmatched` });
+      toast({ title: "AI Matching Complete", description: `${matchedArr.length} concerns paired, ${filteredUnmatched.length} unmatched` });
     } catch (err) {
       console.error("AI matching failed:", err);
       toast({ title: "AI Matching Failed", description: "Could not match defects. Please try again.", variant: "destructive" });
       setMatched([]);
-      setUnmatched(entries.map((dvx, idx) => ({ dvxEntry: dvx, id: `unmatched-${idx}` })));
+      setUnmatched(entries.filter(dvx =>
+        dvx.defectCode || dvx.defectDescription || dvx.defectDescriptionDetails
+      ).map((dvx, idx) => ({ dvxEntry: dvx, id: `unmatched-${idx}` })));
     } finally {
       setIsAIMatching(false);
     }
@@ -527,6 +539,12 @@ const Index = () => {
                 <Button size="sm" variant="outline" className="gap-1.5 h-8 w-full justify-start md:justify-center border-emerald-500/30 hover:bg-emerald-500/5">
                   <BarChart3 className="w-3.5 h-3.5 text-emerald-500" />
                   Dashboard
+                </Button>
+              </Link>
+              <Link to="/glidepath" className="flex-1 sm:flex-initial">
+                <Button size="sm" variant="outline" className="gap-1.5 h-8 w-full justify-start md:justify-center border-blue-500/30 hover:bg-blue-500/5">
+                  <BarChart3 className="w-3.5 h-3.5 text-blue-500" />
+                  Glidepath
                 </Button>
               </Link>
               <Link to="/reoccurrence-history" className="flex-1 sm:flex-initial">

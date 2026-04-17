@@ -29,10 +29,10 @@ export async function aiMatchDefects(
   }));
 
   const BATCH_SIZE = 200;
-  
+
   // Build all batch requests
   const batchPromises: Promise<AIMatch[]>[] = [];
-  
+
   for (let i = 0; i < dvxEntries.length; i += BATCH_SIZE) {
     const batch = dvxEntries.slice(i, i + BATCH_SIZE);
     const batchStart = i;
@@ -47,28 +47,22 @@ export async function aiMatchDefects(
 
     // Fire all batches in parallel
     batchPromises.push(
-      supabase.functions.invoke("match-defects", {
-        body: { defects, concerns },
-      }).then(({ data, error }) => {
-        if (error) {
-          console.error("AI matching error for batch:", error);
+      fetch("/api/match-defects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defects, concerns }),
+      }).then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          console.error("AI matching error for batch:", data.error);
           return batch.map((_, idx) => ({
             defectIndex: batchStart + idx,
             matchedSNo: null,
             confidence: 0,
-            reason: "AI matching failed",
+            reason: data.error || "AI matching failed",
           }));
         }
         if (data?.matches) return data.matches as AIMatch[];
-        if (data?.error) {
-          console.error("AI matching returned error:", data.error);
-          return batch.map((_, idx) => ({
-            defectIndex: batchStart + idx,
-            matchedSNo: null,
-            confidence: 0,
-            reason: data.error,
-          }));
-        }
         return [] as AIMatch[];
       })
     );

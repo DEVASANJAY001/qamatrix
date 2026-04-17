@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Shield, Upload, Trash2, ArrowLeft, Eye, Edit2, Save, Check, X, Calendar, Database, BarChart3, Lock, AlertTriangle, Filter } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -105,15 +104,15 @@ function parseDVXFullFile(file: File): Promise<DVXFullRow[]> {
         const headers = (rows[headerRowIdx] || []).map((h: any) => normalizeHeader(String(h || "")));
 
         const dateCol = findCol(headers, "Date");
-        const locCodeCol = findCol(headers, "Location Code", "Loc Code");
-        const locDetailsCol = findCol(headers, "Location Details", "Location");
-        const codeCol = findCol(headers, "Defect Code");
+        const locCodeCol = findCol(headers, "Location Code", "Loc Code", "location code", "loc code");
+        const locDetailsCol = findCol(headers, "Location Details", "Location", "Loc");
+        const codeCol = findCol(headers, "Defect Code", "Code");
         const descCol = headers.indexOf("defect description") !== -1
           ? headers.indexOf("defect description")
-          : findCol(headers, "Defect Description");
-        const detailsCol = findCol(headers, "Defect Description Details");
-        const gravityCol = findCol(headers, "Gravity");
-        const qtyCol = findCol(headers, "Quantity");
+          : findCol(headers, "Defect Description", "Description", "Desc");
+        const detailsCol = findCol(headers, "Defect Description Details", "Details");
+        const gravityCol = findCol(headers, "Gravity", "Grav");
+        const qtyCol = findCol(headers, "Quantity", "Qty", "Count");
         const sourceCol = findCol(headers, "Source");
         const respCol = findCol(headers, "Responsible");
         const pofFamilyCol = findCol(headers, "POF Family");
@@ -130,8 +129,13 @@ function parseDVXFullFile(file: File): Promise<DVXFullRow[]> {
           if (!row || row.length === 0) continue;
 
           const gravity = getVal(row, gravityCol).toUpperCase();
-          // Only keep S, P, A gravity
-          if (!VALID_GRAVITIES.includes(gravity)) continue;
+          const rowSource = getVal(row, sourceCol).toUpperCase();
+
+          // Rule: Keep S, P, A. Keep B ONLY IF source is DVR.
+          const isSPA = VALID_GRAVITIES.includes(gravity);
+          const isBDVR = gravity === "B" && rowSource === "DVR";
+
+          if (!isSPA && !isBDVR) continue;
 
           const desc = getVal(row, descCol);
           const details = getVal(row, detailsCol);
@@ -187,9 +191,9 @@ function parseFile(file: File): Promise<DefectRow[]> {
           return -1;
         };
 
-        const codeCol = findC("defect code", "code");
-        const locCol = findC("location code", "location", "loc code");
-        const descCol = findC("description detail", "defect description", "description");
+        const codeCol = findC("defect code", "code", "defect_code");
+        const locCol = findC("location code", "location", "loc code", "loc_code", "location_code");
+        const descCol = findC("description detail", "defect description", "description", "desc");
 
         const entries: DefectRow[] = [];
         for (let i = 1; i < rows.length; i++) {
@@ -211,62 +215,63 @@ function parseFile(file: File): Promise<DefectRow[]> {
 }
 
 // DVX Upload Section with gravity filtering
-const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
+const DVXUploadSection = ({ onRefresh, dvxData, fetchDVXData }: { onRefresh: () => void, dvxData: StoredDVXDefect[], fetchDVXData: () => Promise<void> }) => {
   const fileRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<DVXFullRow[]>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [totalParsed, setTotalParsed] = useState(0);
   const [totalFiltered, setTotalFiltered] = useState(0);
-  const [dvxData, setDvxData] = useState<StoredDVXDefect[]>([]);
   const [showReview, setShowReview] = useState(false);
   const [gravityFilter, setGravityFilter] = useState<string>("");
   const [pairingFilter, setPairingFilter] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const fetchDVXData = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("dvx_defects")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (!error && data) setDvxData(data as StoredDVXDefect[]);
-    setLoading(false);
-  };
-
-  useEffect(() => { fetchDVXData(); }, []);
+  useEffect(() => { fetchDVXData(); }, [fetchDVXData]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
     try {
-      // Parse with gravity filter
-      const allRows = await parseDVXFullFile(file);
-      // allRows already filtered to S/P/A
-      // But let's also count how many were in the raw file
-      const rawReader = new FileReader();
-      const rawCount = await new Promise<number>((resolve) => {
-        rawReader.onload = (evt) => {
-          const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-          const wb = XLSX.read(data, { type: "array" });
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          resolve(Math.max(0, rows.length - 1));
-        };
-        rawReader.readAsArrayBuffer(file);
-      });
+      let combinedRows: DVXFullRow[] = [];
+      let combinedRawCount = 0;
 
-      setTotalParsed(rawCount);
-      setTotalFiltered(allRows.length);
+      for (const file of Array.from(files)) {
+        // Parse with gravity filter
+        const allRows = await parseDVXFullFile(file);
+        combinedRows = [...combinedRows, ...allRows];
 
-      if (allRows.length === 0) {
-        toast({ title: "No matching data", description: "No rows found with Gravity S, P, or A.", variant: "destructive" });
+        // Count raw rows
+        const rawReader = new FileReader();
+        const rawCount = await new Promise<number>((resolve) => {
+          rawReader.onload = (evt) => {
+            const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+            const wb = XLSX.read(data, { type: "array" });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            resolve(Math.max(0, rows.length - 1));
+          };
+          rawReader.readAsArrayBuffer(file);
+        });
+        combinedRawCount += rawCount;
+      }
+
+      setTotalParsed(combinedRawCount);
+      setTotalFiltered(combinedRows.length);
+
+      if (combinedRows.length === 0) {
+        toast({ title: "No matching data", description: "No rows found with Gravity S, P, A (or B with DVR source) in the selected files.", variant: "destructive" });
         return;
       }
-      setPreview(allRows);
+      setPreview(combinedRows);
       setShowPreview(true);
-    } catch {
-      toast({ title: "Parse error", description: "Could not read the file.", variant: "destructive" });
+    } catch (err) {
+      console.error("Parse error:", err);
+      toast({ title: "Parse error", description: "Could not read one or more files.", variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -290,12 +295,12 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
       }));
 
       // Batch insert
-      const BATCH = 200;
-      for (let i = 0; i < insertRows.length; i += BATCH) {
-        const batch = insertRows.slice(i, i + BATCH);
-        const { error } = await supabase.from("dvx_defects").insert(batch);
-        if (error) throw error;
-      }
+      const response = await fetch('/api/dvx-defects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(insertRows)
+      });
+      if (!response.ok) throw new Error("DVX upload failed");
 
       // Also insert into final_defect for legacy compatibility
       const finalRows = preview.map(r => ({
@@ -305,12 +310,14 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
         source: r.source || "DVX",
         gravity: r.gravity,
       }));
-      for (let i = 0; i < finalRows.length; i += BATCH) {
-        const batch = finalRows.slice(i, i + BATCH);
-        await supabase.from("final_defect").insert(batch);
-      }
+      const finalResponse = await fetch('/api/final-defect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(finalRows)
+      });
+      if (!finalResponse.ok) console.error("final_defect insert error");
 
-      toast({ title: "Upload successful", description: `${preview.length} DVX defects uploaded (filtered: S/P/A gravity).` });
+      toast({ title: "Upload successful", description: `${preview.length} DVX defects uploaded (filtered: S/P/A/ + B-DVR gravity).` });
       setPreview([]);
       setShowPreview(false);
       fetchDVXData();
@@ -324,13 +331,18 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
 
   const handleClearDVX = async () => {
     if (!confirm("Delete all DVX defect data?")) return;
-    const { error } = await supabase.from("dvx_defects").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
+    try {
+      const response = await fetch('/api/delete-defects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'DVX' })
+      });
+      if (!response.ok) throw new Error("Delete failed");
       toast({ title: "Cleared", description: "All DVX defect data deleted." });
       fetchDVXData();
       onRefresh();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     }
   };
 
@@ -349,15 +361,15 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
         <div>
           <h3 className="text-sm font-bold">DVX Defects <span className="text-muted-foreground font-normal">({dvxData.length} records)</span></h3>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Only Gravity S / P / A records are stored ·
+            Only Gravity S / P / A (and B-DVR) records are stored ·
             <span className="text-primary font-semibold ml-1">{pairedCount} paired</span> ·
             <span className="text-warning font-semibold ml-1">{notPairedCount} not paired</span>
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => fileRef.current?.click()}>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => fileRef.current?.click()} disabled={uploading}>
             <Upload className="w-3.5 h-3.5" />
-            Upload DVX Excel
+            {uploading ? "Parsing..." : "Upload DVX Excel"}
           </Button>
           {dvxData.length > 0 && (
             <>
@@ -373,7 +385,7 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
           )}
         </div>
       </div>
-      <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
+      <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" multiple />
 
       {dvxData.length === 0 && !showPreview && (
         <p className="text-xs text-muted-foreground italic">No DVX data uploaded yet. Upload an Excel file with DVX defect data.</p>
@@ -387,7 +399,7 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
           </DialogHeader>
           <div className="flex items-center gap-3 text-xs mb-2">
             <span className="bg-muted px-2 py-1 rounded">Total rows in file: <strong>{totalParsed}</strong></span>
-            <span className="bg-primary/10 text-primary px-2 py-1 rounded">After S/P/A filter: <strong>{totalFiltered}</strong></span>
+            <span className="bg-primary/10 text-primary px-2 py-1 rounded">After S/P/A/B-DVR filter: <strong>{totalFiltered}</strong></span>
             <span className="bg-destructive/10 text-destructive px-2 py-1 rounded">Filtered out: <strong>{totalParsed - totalFiltered}</strong></span>
           </div>
           <div className="flex-1 overflow-auto border border-border rounded-md">
@@ -414,8 +426,8 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
                     <td className="px-2 py-1 max-w-[180px] truncate">{row.defect_description_details}</td>
                     <td className="px-2 py-1 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${row.gravity === "S" ? "bg-destructive/15 text-destructive" :
-                          row.gravity === "P" ? "bg-warning/15 text-warning" :
-                            "bg-primary/15 text-primary"
+                        row.gravity === "P" ? "bg-warning/15 text-warning" :
+                          "bg-primary/15 text-primary"
                         }`}>{row.gravity}</span>
                     </td>
                     <td className="px-2 py-1 text-center font-mono">{row.quantity}</td>
@@ -429,7 +441,7 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
             )}
           </div>
           <div className="flex items-center justify-between pt-3 border-t border-border">
-            <span className="text-xs text-muted-foreground">{preview.length} rows ready (S/P/A only)</span>
+            <span className="text-xs text-muted-foreground">{preview.length} rows ready (S/P/A/B-DVR only)</span>
             <div className="flex gap-2">
               <Button size="sm" variant="outline" onClick={() => { setShowPreview(false); setPreview([]); }}>Cancel</Button>
               <Button size="sm" onClick={handleUpload} disabled={uploading}>
@@ -483,8 +495,8 @@ const DVXUploadSection = ({ onRefresh }: { onRefresh: () => void }) => {
                     <td className="px-2 py-1 max-w-[200px] truncate">{d.defect_description_details}</td>
                     <td className="px-2 py-1 text-center">
                       <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${d.gravity === "S" ? "bg-destructive/15 text-destructive" :
-                          d.gravity === "P" ? "bg-warning/15 text-warning" :
-                            "bg-primary/15 text-primary"
+                        d.gravity === "P" ? "bg-warning/15 text-warning" :
+                          "bg-primary/15 text-primary"
                         }`}>{d.gravity}</span>
                     </td>
                     <td className="px-2 py-1 text-center font-mono">{d.quantity}</td>
@@ -517,20 +529,30 @@ const SourceSection = ({ source, data, onRefresh, lastUploadDate }: { source: So
   const [showReview, setShowReview] = useState(false);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
     try {
-      const rows = await parseFile(file);
-      if (rows.length === 0) {
-        toast({ title: "No data found", description: "The file has no valid rows.", variant: "destructive" });
+      let combinedRows: DefectRow[] = [];
+      for (const file of Array.from(files)) {
+        const rows = await parseFile(file);
+        combinedRows = [...combinedRows, ...rows];
+      }
+
+      if (combinedRows.length === 0) {
+        toast({ title: "No data found", description: "The selected files have no valid rows.", variant: "destructive" });
         return;
       }
-      setPreview(rows);
+      setPreview(combinedRows);
       setShowPreview(true);
       setHasEdits(false);
       setConfirmUpload(false);
-    } catch {
-      toast({ title: "Parse error", description: "Could not read the file.", variant: "destructive" });
+    } catch (err) {
+      console.error("Parse error:", err);
+      toast({ title: "Parse error", description: "Could not read one or more files.", variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
     if (fileRef.current) fileRef.current.value = "";
   };
@@ -551,15 +573,23 @@ const SourceSection = ({ source, data, onRefresh, lastUploadDate }: { source: So
     setUploading(true);
     try {
       const insertRows = preview.map(r => ({ ...r, source }));
-      const { error } = await supabase.from("defect_data").insert(insertRows);
-      if (error) throw error;
+      const response = await fetch('/api/defect-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(insertRows)
+      });
+      if (!response.ok) throw new Error("Upload failed");
 
       const finalRows = preview
         .filter(r => r.defect_code || r.defect_description_details)
         .map(r => ({ defect_code: r.defect_code, defect_location_code: r.defect_location_code, defect_description_details: r.defect_description_details, source }));
+
       if (finalRows.length > 0) {
-        const { error: finalError } = await supabase.from("final_defect").insert(finalRows);
-        if (finalError) console.error("final_defect insert error:", finalError);
+        await fetch('/api/final-defect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(finalRows)
+        });
       }
 
       toast({ title: "Upload successful", description: `${preview.length} defects uploaded for ${source}.` });
@@ -572,10 +602,15 @@ const SourceSection = ({ source, data, onRefresh, lastUploadDate }: { source: So
 
   const handleClear = async () => {
     if (!confirm(`Delete all ${source} defect data?`)) return;
-    const { error: e1 } = await supabase.from("defect_data").delete().eq("source", source);
-    const { error: e2 } = await supabase.from("final_defect").delete().eq("source", source);
-    if (e1 || e2) toast({ title: "Error", description: (e1 || e2)?.message, variant: "destructive" });
-    else { toast({ title: "Cleared", description: `All ${source} data deleted.` }); onRefresh(); }
+    try {
+      const r1 = await fetch(`/api/defect-data?source=${source}`, { method: 'DELETE' });
+      const r2 = await fetch(`/api/final-defect?source=${source}`, { method: 'DELETE' });
+      if (!r1.ok || !r2.ok) throw new Error("Delete failed");
+      toast({ title: "Cleared", description: `All ${source} data deleted.` });
+      onRefresh();
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    }
   };
 
   const sourceColors: Record<Source, string> = { DVX: "border-sky-400/60", SCA: "border-emerald-400/60", YARD: "border-amber-400/60" };
@@ -592,8 +627,8 @@ const SourceSection = ({ source, data, onRefresh, lastUploadDate }: { source: So
           )}
         </div>
         <div className="flex gap-2">
-          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => fileRef.current?.click()}>
-            <Upload className="w-3.5 h-3.5" />Upload CSV/Excel
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Upload className="w-3.5 h-3.5" />{uploading ? "Parsing..." : "Upload CSV/Excel"}
           </Button>
           {data.length > 0 && (
             <>
@@ -607,7 +642,7 @@ const SourceSection = ({ source, data, onRefresh, lastUploadDate }: { source: So
           )}
         </div>
       </div>
-      <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" />
+      <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileSelect} className="hidden" multiple />
       {data.length === 0 && !showPreview && <p className="text-xs text-muted-foreground italic">No data uploaded yet.</p>}
 
       {/* Preview Dialog */}
@@ -712,14 +747,30 @@ const DefectUpload = () => {
   const [loading, setLoading] = useState(true);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<"DVX" | "SCA" | "YARD" | "ALL" | "FINAL">("ALL");
-  const [deletePassword, setDeletePassword] = useState("");
-  const [deleteError, setDeleteError] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  const [dvxData, setDvxData] = useState<StoredDVXDefect[]>([]);
+
+  const fetchDVXData = async () => {
+    try {
+      const res = await fetch('/api/dvx-defects');
+      const data = await res.json();
+      if (res.ok) setDvxData(data as StoredDVXDefect[]);
+    } catch (err) {
+      console.error("Fetch DVX error:", err);
+    }
+  };
 
   const fetchDefects = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from("defect_data").select("*").order("uploaded_at", { ascending: false });
-    if (!error && data) setDefects(data as StoredDefect[]);
+    await fetchDVXData();
+    try {
+      const res = await fetch('/api/defect-data');
+      const data = await res.json();
+      if (res.ok) setDefects(data as StoredDefect[]);
+    } catch (err) {
+      console.error("Fetch defects error:", err);
+    }
     setLoading(false);
   };
 
@@ -732,25 +783,26 @@ const DefectUpload = () => {
   };
 
   const handleDelete = async () => {
-    if (!deletePassword.trim()) { setDeleteError("Enter password"); return; }
-    setDeleteError("");
     setDeleting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("delete-defects", {
-        body: { password: deletePassword, target: deleteTarget },
+      const response = await fetch('/api/delete-defects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: deleteTarget })
       });
-      if (error) throw error;
-      if (data?.error) { setDeleteError(data.error); setDeleting(false); return; }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Delete failed");
+
       toast({ title: "Deleted", description: `${deleteTarget} data deleted successfully.` });
-      setDeleteDialogOpen(false); setDeletePassword(""); setDeleteTarget("ALL");
+      setDeleteDialogOpen(false); setDeleteTarget("ALL");
       fetchDefects();
     } catch (err: any) {
-      setDeleteError(err.message || "Delete failed");
+      toast({ title: "Error", description: err.message || "Delete failed", variant: "destructive" });
     } finally { setDeleting(false); }
   };
 
-  const totalDefects = defects.length;
-  const dvxCount = defects.filter(d => d.source === "DVX").length;
+  const totalDefects = defects.length + dvxData.length;
+  const dvxCount = dvxData.length + defects.filter(d => d.source === "DVX").length;
   const scaCount = defects.filter(d => d.source === "SCA").length;
   const yardCount = defects.filter(d => d.source === "YARD").length;
 
@@ -767,8 +819,8 @@ const DefectUpload = () => {
             <p className="text-[11px] text-muted-foreground">Upload defect data for DVX, SCA, and YARD teams</p>
           </div>
           <div className="ml-auto">
-            <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => { setDeleteDialogOpen(true); setDeletePassword(""); setDeleteError(""); }}>
-              <Lock className="w-3.5 h-3.5" />Admin Delete
+            <Button size="sm" variant="destructive" className="gap-1.5" onClick={() => { setDeleteDialogOpen(true); }}>
+              <Trash2 className="w-3.5 h-3.5" />Admin Delete
             </Button>
           </div>
         </div>
@@ -794,7 +846,7 @@ const DefectUpload = () => {
         </div>
 
         {/* DVX Upload Section (with gravity filtering) */}
-        <DVXUploadSection onRefresh={fetchDefects} />
+        <DVXUploadSection onRefresh={fetchDefects} dvxData={dvxData} fetchDVXData={fetchDVXData} />
 
         {/* SCA and YARD sections */}
         {(["SCA", "YARD"] as Source[]).map(source => (
@@ -820,9 +872,7 @@ const DefectUpload = () => {
               <option value="YARD">YARD Only</option>
               <option value="FINAL">Final Defect Table Only</option>
             </select>
-            <input type="password" placeholder="Admin password..." value={deletePassword} onChange={e => { setDeletePassword(e.target.value); setDeleteError(""); }}
-              className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background" />
-            {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
+            <p className="text-sm text-muted-foreground">Are you sure you want to delete <span className="font-bold text-foreground">{deleteTarget}</span> data? This action cannot be undone.</p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
               <Button variant="destructive" onClick={handleDelete} disabled={deleting}>{deleting ? "Deleting..." : "Delete"}</Button>
