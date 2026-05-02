@@ -139,10 +139,15 @@ async function getGeminiMatches(apiKey, prompt, defects, concerns) {
       tool_config: { function_calling_config: { mode: "ANY", allowed_function_names: ["submit_matches"] } }
     }),
   });
+
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
+    const msg = error.error?.message || `Gemini API error: ${response.status}`;
+    const err = new Error(msg);
+    err.status = response.status;
+    throw err;
   }
+
   const aiResult = await response.json();
   const candidate = aiResult.candidates?.[0];
   const toolCall = candidate?.content?.parts?.find(p => p.functionCall)?.functionCall;
@@ -162,7 +167,9 @@ app.post('/api/match-defects', async (req, res) => {
     const matches = await getGeminiMatches(GEMINI_API_KEY, prompt, defects, concerns);
     res.json({ matches });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("AI matching error:", err);
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
@@ -276,6 +283,63 @@ app.post('/api/delete-defects', async (req, res) => {
       await db.collection('defect_data').deleteMany({ source: target });
     }
     res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Utility: Fetch Spreadsheet
+app.post('/api/fetch-spreadsheet', async (req, res) => {
+  try {
+    const { default: fetch } = await import('node-fetch');
+    const { url } = req.body;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Fetch failed: ${response.statusText}`);
+    const buffer = await response.arrayBuffer();
+    res.set('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(Buffer.from(buffer));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/pair-by-semantic', async (req, res) => {
+  try {
+    const db = await connectDB();
+    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+    if (!GEMINI_API_KEY) return res.status(500).json({ error: "Gemini key missing" });
+
+    const concerns = await db.collection('qa_matrix_entries').find({}).toArray();
+    const defects = await db.collection('dvx_defects').find({ pairing_status: { $ne: 'paired' } }).toArray();
+
+    if (defects.length === 0) return res.json({ paired: 0, unpaired: 0, message: "No unpaired defects found." });
+
+    const concernsList = concerns.map(c => `[${c.s_no}] "${c.concern}"`).join("\n");
+    let pairedCount = 0;
+    let batchSize = 25;
+
+    for (let i = 0; i < defects.length; i += batchSize) {
+      const batch = defects.slice(i, i + batchSize);
+      const defectsList = batch.map((d, idx) => `[${idx}] Defect: "${d.defect_description_details}"`).join("\n");
+      const prompt = `Match these defects to QA concerns:\nQA:\n${concernsList}\n\nDefects:\n${defectsList}`;
+
+      try {
+        const matches = await getGeminiMatches(GEMINI_API_KEY, prompt, batch.map((_, idx) => ({ index: idx })), concerns.map(c => ({ sNo: c.s_no, concern: c.concern })));
+        for (const match of matches) {
+          const defect = batch[match.defectIndex];
+          if (match.matchedSNo && match.confidence >= 0.7) {
+            await db.collection('dvx_defects').updateOne(
+              { _id: defect._id },
+              { $set: { pairing_status: 'paired', pairing_method: 'semantic_ai', match_score: match.confidence, qa_matrix_sno: match.matchedSNo } }
+            );
+            pairedCount++;
+          }
+        }
+      } catch (e) {
+        console.error("Batch match error:", e);
+      }
+    }
+    res.json({ paired: pairedCount, unpaired: defects.length - pairedCount });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
