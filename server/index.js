@@ -165,7 +165,8 @@ For each defect, find the best matching QA concern based on semantic understandi
         res.json({ matches });
     } catch (err) {
         console.error("AI matching error:", err);
-        res.status(500).json({ error: err.message });
+        const status = err.status || 500;
+        res.status(status).json({ error: err.message });
     }
 });
 
@@ -211,7 +212,10 @@ async function getGeminiMatches(apiKey, prompt, defects, concerns) {
 
     if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.error?.message || `Gemini API error: ${response.status}`);
+        const msg = error.error?.message || `Gemini API error: ${response.status}`;
+        const err = new Error(msg);
+        err.status = response.status;
+        throw err;
     }
 
     const aiResult = await response.json();

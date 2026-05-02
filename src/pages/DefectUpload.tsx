@@ -20,7 +20,6 @@ interface DefectRow {
 }
 
 interface DVXFullRow {
-  date: string;
   location_code: string;
   location_details: string;
   defect_code: string;
@@ -150,7 +149,6 @@ function parseDVXFullFile(file: File): Promise<DVXFullRow[]> {
           const locCode = locCodeCol >= 0 ? getVal(row, locCodeCol) : dateVal;
 
           entries.push({
-            date: dateVal,
             location_code: locCode,
             location_details: getVal(row, locDetailsCol),
             defect_code: getVal(row, codeCol),
@@ -282,7 +280,6 @@ const DVXUploadSection = ({ onRefresh, dvxData, fetchDVXData }: { onRefresh: () 
     setUploading(true);
     try {
       const insertRows = preview.map(r => ({
-        date: r.date,
         location_code: r.location_code,
         location_details: r.location_details,
         defect_code: r.defect_code,

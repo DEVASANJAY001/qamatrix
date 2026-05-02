@@ -1,4 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
 import { DVXEntry } from "@/types/dvxReport";
 import { QAMatrixEntry } from "@/types/qaMatrix";
 
@@ -13,9 +12,43 @@ interface AIMatchResult {
   matches: AIMatch[];
 }
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithRetry(url: string, options: any, maxRetries = 3): Promise<any> {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      const data = await response.json();
+      
+      if (response.ok) return data;
+      
+      // If we hit a rate limit (429) or a temporary server error (500), retry
+      if (response.status === 429 || response.status === 500) {
+        lastError = data.error || `HTTP ${response.status}`;
+        if (attempt < maxRetries) {
+          const waitTime = Math.pow(2, attempt) * 3000 + Math.random() * 1000;
+          console.warn(`AI Match: Attempt ${attempt + 1} failed (${lastError}). Retrying in ${Math.round(waitTime)}ms...`);
+          await delay(waitTime);
+          continue;
+        }
+      }
+      return { error: data.error || `HTTP ${response.status}` };
+    } catch (err: any) {
+      lastError = err.message;
+      if (attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 3000;
+        await delay(waitTime);
+        continue;
+      }
+    }
+  }
+  return { error: lastError };
+}
+
 /**
  * Use AI agent to semantically match DVX defects with QA matrix concerns.
- * Sends defects in batches to avoid token limits.
+ * Sends defects in batches and respects rate limits.
  */
 export async function aiMatchDefects(
   dvxEntries: DVXEntry[],
@@ -28,10 +61,8 @@ export async function aiMatchDefects(
     designation: q.designation,
   }));
 
-  const BATCH_SIZE = 200;
-
-  // Build all batch requests
-  const batchPromises: Promise<AIMatch[]>[] = [];
+  const BATCH_SIZE = 150;
+  const allMatches: AIMatch[] = [];
 
   for (let i = 0; i < dvxEntries.length; i += BATCH_SIZE) {
     const batch = dvxEntries.slice(i, i + BATCH_SIZE);
@@ -45,31 +76,32 @@ export async function aiMatchDefects(
       quantity: d.quantity,
     }));
 
-    // Fire all batches in parallel
-    batchPromises.push(
-      fetch("/api/match-defects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ defects, concerns }),
-      }).then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) {
-          console.error("AI matching error for batch:", data.error);
-          return batch.map((_, idx) => ({
-            defectIndex: batchStart + idx,
-            matchedSNo: null,
-            confidence: 0,
-            reason: data.error || "AI matching failed",
-          }));
-        }
-        if (data?.matches) return data.matches as AIMatch[];
-        return [] as AIMatch[];
-      })
-    );
-  }
+    console.log(`AI Match: Processing batch ${Math.floor(i / BATCH_SIZE) + 1} of ${Math.ceil(dvxEntries.length / BATCH_SIZE)}...`);
 
-  const batchResults = await Promise.all(batchPromises);
-  const allMatches = batchResults.flat();
+    const data = await fetchWithRetry("/api/match-defects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ defects, concerns }),
+    });
+
+    if (data.error) {
+      console.error("AI matching error for batch:", data.error);
+      allMatches.push(...batch.map((_, idx) => ({
+        defectIndex: batchStart + idx,
+        matchedSNo: null,
+        confidence: 0,
+        reason: data.error,
+      })));
+    } else if (data?.matches) {
+      allMatches.push(...(data.matches as AIMatch[]));
+    }
+
+    // Delay to respect 5 RPM limit (12s per request)
+    if (i + BATCH_SIZE < dvxEntries.length) {
+      console.log(`AI Match: Waiting 12 seconds before next batch to respect rate limits...`);
+      await delay(12000);
+    }
+  }
 
   return { matches: allMatches };
 }
