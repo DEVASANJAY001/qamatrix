@@ -109,8 +109,8 @@ function parseDVXFullFile(file: File): Promise<DVXFullRow[]> {
         const codeCol = findCol(headers, "Defect Code", "Code");
         const descCol = headers.indexOf("defect description") !== -1
           ? headers.indexOf("defect description")
-          : findCol(headers, "Defect Description", "Description", "Desc");
-        const detailsCol = findCol(headers, "Defect Description Details", "Details");
+          : findCol(headers, "Defect Description", "Description", "Desc", "Problem", "Observation", "Defect");
+        const detailsCol = findCol(headers, "Defect Description Details", "Details", "Remarks", "Comment");
         const gravityCol = findCol(headers, "Gravity", "Grav");
         const qtyCol = findCol(headers, "Quantity", "Qty", "Count");
         const sourceCol = findCol(headers, "Source");
@@ -193,7 +193,7 @@ function parseFile(file: File): Promise<DefectRow[]> {
 
         const codeCol = findC("defect code", "code", "defect_code");
         const locCol = findC("location code", "location", "loc code", "loc_code", "location_code");
-        const descCol = findC("description detail", "defect description", "description", "desc");
+        const descCol = findC("description detail", "defect description", "description", "desc", "problem", "observation", "defect", "remarks");
 
         const entries: DefectRow[] = [];
         for (let i = 1; i < rows.length; i++) {
@@ -306,7 +306,8 @@ const DVXUploadSection = ({ onRefresh, dvxData, fetchDVXData }: { onRefresh: () 
       const finalRows = preview.map(r => ({
         defect_code: r.defect_code,
         defect_location_code: r.location_code,
-        defect_description_details: r.defect_description_details,
+        defect_description: r.defect_description,
+        defect_description_details: r.defect_description_details || r.defect_description,
         source: r.source || "DVX",
         gravity: r.gravity,
       }));
@@ -488,8 +489,8 @@ const DVXUploadSection = ({ onRefresh, dvxData, fetchDVXData }: { onRefresh: () 
                 </tr>
               </thead>
               <tbody>
-                {filteredDVXData.map((d) => (
-                  <tr key={d.id} className="border-t border-border/30">
+                {filteredDVXData.map((d, index) => (
+                  <tr key={d.id || index} className="border-t border-border/30">
                     <td className="px-2 py-1 font-mono">{d.defect_code}</td>
                     <td className="px-2 py-1 max-w-[150px] truncate">{d.location_details || d.location_code}</td>
                     <td className="px-2 py-1 max-w-[200px] truncate">{d.defect_description_details}</td>

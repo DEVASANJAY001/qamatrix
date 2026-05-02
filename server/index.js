@@ -29,6 +29,28 @@ async function connectDB() {
 
 connectDB();
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(url, options, maxRetries = 3) {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.status === 429 || response.status >= 500) {
+                const waitTime = (i + 1) * 10000; // 10s, 20s, 30s
+                console.warn(`Retry ${i + 1}: Received ${response.status}. Waiting ${waitTime}ms...`);
+                await wait(waitTime);
+                continue;
+            }
+            return response;
+        } catch (err) {
+            lastError = err;
+            await wait(2000 * (i + 1));
+        }
+    }
+    throw lastError || new Error("Max retries reached");
+}
+
 // API Routes
 app.get('/api/qa-matrix', async (req, res) => {
     try {
@@ -171,7 +193,7 @@ For each defect, find the best matching QA concern based on semantic understandi
 });
 
 async function getGeminiMatches(apiKey, prompt, defects, concerns) {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -366,8 +388,12 @@ app.post('/api/pair-by-semantic', async (req, res) => {
         let batchSize = 25;
 
         for (let i = 0; i < defects.length; i += batchSize) {
+            if (i > 0) {
+                console.log(`Waiting 15s before batch ${i / batchSize + 1}...`);
+                await wait(15000);
+            }
             const batch = defects.slice(i, i + batchSize);
-            const defectsList = batch.map((d, idx) => `[${idx}] Defect: "${d.defect_description_details}"`).join("\n");
+            const defectsList = batch.map((d, idx) => `[${idx}] Defect: "${d.defect_description_details || d.defect_description || "Unknown Defect"}"`).join("\n");
 
             const prompt = `Match these defects to QA concerns:\nQA:\n${concernsList}\n\nDefects:\n${defectsList}`;
 

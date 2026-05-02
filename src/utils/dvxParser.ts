@@ -55,8 +55,8 @@ export function parseDVXSheet(sheet: XLSX.WorkSheet): DVXEntry[] {
   // For description vs details: match exact first to avoid collision
   const descCol = headers.indexOf("defect description") !== -1
     ? headers.indexOf("defect description")
-    : findCol(headers, "Defect Description", "Description", "Desc");
-  const detailsCol = findCol(headers, "Defect Description Details", "Details");
+    : findCol(headers, "Defect Description", "Description", "Desc", "Problem", "Observation", "Defect");
+  const detailsCol = findCol(headers, "Defect Description Details", "Details", "Remarks", "Comment");
   const gravityCol = findCol(headers, "Gravity", "Grav");
   const qtyCol = findCol(headers, "Quantity", "Qty", "Count");
   const sourceCol = findCol(headers, "Source");
