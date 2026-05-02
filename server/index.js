@@ -148,15 +148,14 @@ app.post('/api/snapshots', async (req, res) => {
     }
 });
 
-// AI Match (Direct Gemini API)
+// AI Match (Supports OpenAI or Gemini)
 app.post('/api/match-defects', async (req, res) => {
     try {
         const { defects, concerns } = req.body;
+        const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
         const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-        if (!GEMINI_API_KEY) {
-            return res.status(500).json({ error: "GEMINI_API_KEY is not configured on server" });
-        }
+        const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+        const AI_MODEL = process.env.AI_MODEL || "google/gemini-3.1-flash-lite-preview";
 
         if (!defects?.length || !concerns?.length) {
             return res.json({ matches: defects?.map(() => null) || [] });
@@ -181,10 +180,31 @@ ${concernsList}
 Defects to match:
 ${defectsList}
 
-For each defect, find the best matching QA concern based on semantic understanding.`;
+For each defect, find the best matching QA concern based on semantic understanding. 
+Even if the words are not identical, use your expertise to find the most logical match.
+Return the result in a JSON object with a 'matches' array. Each match must include a 'reason' explaining the match.`;
 
-        const matches = await getGeminiMatches(GEMINI_API_KEY, prompt, defects, concerns);
-        res.json({ matches });
+
+
+        if (OPENROUTER_API_KEY && OPENROUTER_API_KEY.trim().length > 10) {
+            console.log(`AI Match: Using OpenRouter (${AI_MODEL})`);
+            const matches = await getOpenRouterMatches(OPENROUTER_API_KEY, AI_MODEL, prompt);
+            return res.json({ matches });
+        }
+
+        if (GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 10) {
+            console.log(`AI Match: Using Gemini (key ends in ...${GEMINI_API_KEY.slice(-4)})`);
+            const matches = await getGeminiMatches(GEMINI_API_KEY, prompt, defects, concerns);
+            return res.json({ matches });
+        }
+
+        if (OPENAI_API_KEY && OPENAI_API_KEY.trim().length > 10) {
+            console.log(`AI Match: Using OpenAI (key ends in ...${OPENAI_API_KEY.slice(-4)})`);
+            const matches = await getOpenAIMatches(OPENAI_API_KEY, prompt, defects, concerns);
+            return res.json({ matches });
+        }
+
+        res.status(500).json({ error: "AI API keys not configured on server" });
     } catch (err) {
         console.error("AI matching error:", err);
         const status = err.status || 500;
@@ -192,8 +212,75 @@ For each defect, find the best matching QA concern based on semantic understandi
     }
 });
 
+async function getOpenRouterMatches(apiKey, model, prompt) {
+    const response = await fetchWithRetry('https://openrouter.ai/api/v1/chat/completions', {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`,
+            "HTTP-Referer": "http://localhost:8080",
+            "X-Title": "QA Matrix"
+        },
+        body: JSON.stringify({
+            model: model,
+            messages: [
+                { role: "system", content: "You are an automotive quality assurance expert. You must return a JSON object with a 'matches' array. Each item in 'matches' must have: defectIndex (number), matchedSNo (number or null), confidence (number 0-1), and reason (string)." },
+                { role: "user", content: prompt }
+            ],
+            max_tokens: 4000,
+            response_format: { type: "json_object" }
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `OpenRouter error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) throw new Error("AI returned an empty response.");
+
+    try {
+        const result = JSON.parse(content);
+        return result.matches;
+    } catch (e) {
+        console.error("Failed to parse AI JSON. Length:", content.length);
+        console.error("Response Start:", content.substring(0, 100));
+        console.error("Response End:", content.slice(-100));
+        throw new Error(`Invalid JSON from AI: ${e.message}`);
+    }
+}
+
+async function getOpenAIMatches(apiKey, prompt, defects, concerns) {
+    const response = await fetchWithRetry('https://api.openai.com/v1/chat/completions', {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+                { role: "system", content: "You are an automotive quality assurance expert. You must return a JSON object with a 'matches' array. Each item in 'matches' must have: defectIndex (number), matchedSNo (number or null), confidence (number 0-1), and reason (string)." },
+                { role: "user", content: prompt }
+            ],
+            response_format: { type: "json_object" }
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error?.message || `OpenAI error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const result = JSON.parse(data.choices[0].message.content);
+    return result.matches;
+}
+
 async function getGeminiMatches(apiKey, prompt, defects, concerns) {
-    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`, {
+    const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -374,49 +461,80 @@ app.post('/api/fetch-spreadsheet', async (req, res) => {
 
 app.post('/api/pair-by-semantic', async (req, res) => {
     try {
-        const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-        if (!GEMINI_API_KEY) return res.status(500).json({ error: "Gemini key missing" });
-
         const concerns = await db.collection('qa_matrix_entries').find({}).toArray();
         const defects = await db.collection('dvx_defects').find({ pairing_status: { $ne: 'paired' } }).toArray();
+
+        console.log(`AI Match: Found ${concerns.length} concerns and ${defects.length} unpaired defects.`);
 
         if (defects.length === 0) return res.json({ paired: 0, unpaired: 0, message: "No unpaired defects found." });
 
         const concernsList = concerns.map(c => `[${c.s_no}] "${c.concern}"`).join("\n");
 
         let pairedCount = 0;
-        let batchSize = 25;
+        let batchSize = 5;
 
         for (let i = 0; i < defects.length; i += batchSize) {
             if (i > 0) {
-                console.log(`Waiting 15s before batch ${i / batchSize + 1}...`);
-                await wait(15000);
+                console.log(`Waiting 5s before batch ${i / batchSize + 1}...`);
+                await wait(5000);
             }
             const batch = defects.slice(i, i + batchSize);
-            const defectsList = batch.map((d, idx) => `[${idx}] Defect: "${d.defect_description_details || d.defect_description || "Unknown Defect"}"`).join("\n");
+            const defectsList = batch.map((d, idx) => `[${idx}] "${d.defect_description_details || d.defect_description || "Unknown"}" (code: ${d.defect_code}, loc: ${d.location_code})`).join("\n");
 
-            const prompt = `Match these defects to QA concerns:\nQA:\n${concernsList}\n\nDefects:\n${defectsList}`;
+            const prompt = `Match these defects to QA concerns. Be precise.
+QA Concerns:
+${concernsList}
+
+Defects to Match:
+${defectsList}
+
+Return JSON with 'matches' array. Each match: { defectIndex, matchedSNo, confidence, reason (max 10 words) }`;
 
             try {
-                const matches = await getGeminiMatches(GEMINI_API_KEY, prompt, batch.map((_, idx) => ({ index: idx })), concerns.map(c => ({ sNo: c.s_no, concern: c.concern })));
+                const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+                const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+                const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+                const AI_MODEL = process.env.AI_MODEL || "google/gemini-3.1-flash-lite-preview";
+                let matches;
 
-                for (const match of matches) {
+                if (OPENROUTER_API_KEY && OPENROUTER_API_KEY.trim().length > 10) {
+                    matches = await getOpenRouterMatches(OPENROUTER_API_KEY, AI_MODEL, prompt);
+                } else if (GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 10) {
+                    matches = await getGeminiMatches(GEMINI_API_KEY, prompt, batch.map((_, idx) => ({ index: idx })), concerns.map(c => ({ sNo: c.s_no, concern: c.concern })));
+                } else if (OPENAI_API_KEY && OPENAI_API_KEY.trim().length > 10) {
+                    matches = await getOpenAIMatches(OPENAI_API_KEY, prompt, batch, concerns);
+                } else {
+                    throw new Error("No AI API keys configured");
+                }
+
+                console.log(`AI Match: Received ${matches.length} results from AI. Updating database...`);
+                
+                const updatePromises = matches.map(async (match) => {
                     const defect = batch[match.defectIndex];
-                    if (match.matchedSNo && match.confidence >= 0.7) {
-                        await db.collection('dvx_defects').updateOne(
+                    if (!defect) return;
+
+                    if (match.matchedSNo && match.confidence >= 0.6) {
+                        console.log(`AI Match: [SUCCESS] Defect "${defect.defect_description_details || defect.defect_description}" -> SNo ${match.matchedSNo}`);
+                        pairedCount++;
+                        return db.collection('dvx_defects').updateOne(
                             { _id: defect._id },
                             {
                                 $set: {
                                     pairing_status: 'paired',
                                     pairing_method: 'semantic_ai',
                                     match_score: match.confidence,
-                                    qa_matrix_sno: match.matchedSNo
+                                    qa_matrix_sno: match.matchedSNo,
+                                    pairing_reason: match.reason
                                 }
                             }
                         );
-                        pairedCount++;
+                    } else {
+                        // Optional: Log rejections if needed
+                        return null;
                     }
-                }
+                });
+
+                await Promise.all(updatePromises.filter(p => p !== null));
             } catch (e) {
                 console.error("Batch match error:", e);
             }

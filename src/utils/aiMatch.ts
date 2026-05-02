@@ -98,8 +98,8 @@ export async function aiMatchDefects(
 
     // Delay to respect 5 RPM limit (12s per request)
     if (i + BATCH_SIZE < dvxEntries.length) {
-      console.log(`AI Match: Waiting 12 seconds before next batch to respect rate limits...`);
-      await delay(12000);
+      console.log(`AI Match: Waiting 15 seconds before next batch to respect rate limits...`);
+      await delay(15000);
     }
   }
 
