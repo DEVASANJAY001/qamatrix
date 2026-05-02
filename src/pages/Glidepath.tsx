@@ -1,11 +1,50 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQAMatrixDB } from "@/hooks/useQAMatrixDB";
 import { Link } from "react-router-dom";
-import { ArrowLeft, BarChart3, LayoutDashboard, Settings, HelpCircle, ShieldAlert } from "lucide-react";
+import { ArrowLeft, BarChart3, LayoutDashboard, Settings, HelpCircle, ShieldAlert, Calendar, X, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const Glidepath = () => {
     const { data, loading } = useQAMatrixDB();
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [dvxDefects, setDvxDefects] = useState<any[]>([]);
+
+    useEffect(() => {
+        const fetchDVX = async () => {
+            try {
+                const res = await fetch('/api/dvx-defects');
+                const defects = await res.json();
+                if (res.ok) {
+                    setDvxDefects(defects.filter((d: any) => d.pairing_status === 'paired' && d.qa_matrix_sno));
+                }
+            } catch (err) {
+                console.error("Fetch DVX error:", err);
+            }
+        };
+        fetchDVX();
+    }, []);
+
+    const filteredData = useMemo(() => {
+        if (!startDate && !endDate) return data;
+
+        const start = startDate ? new Date(startDate).getTime() : 0;
+        const end = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : Infinity;
+
+        const counts = new Map<number, number>();
+        dvxDefects.forEach(d => {
+            const dDate = new Date(d.date || d.created_at).getTime();
+            if (dDate >= start && dDate <= end) {
+                const sno = d.qa_matrix_sno;
+                counts.set(sno, (counts.get(sno) || 0) + (d.quantity || 1));
+            }
+        });
+
+        return data.map(entry => ({
+            ...entry,
+            recurrence: counts.get(entry.sNo) || 0
+        })).filter(entry => entry.recurrence > 0);
+    }, [data, dvxDefects, startDate, endDate]);
 
     const mfgMatrix = useMemo(() => {
         const matrix = {
@@ -14,7 +53,7 @@ const Glidepath = () => {
             1: { 1: 0, 3: 0, 5: 0 }
         };
 
-        data.forEach(entry => {
+        filteredData.forEach(entry => {
             const severity = entry.defectRating;
             const control = entry.controlRating.Shop || 0;
 
@@ -29,7 +68,7 @@ const Glidepath = () => {
         });
 
         return matrix;
-    }, [data]);
+    }, [filteredData]);
 
     const wsMatrix = useMemo(() => {
         const matrix = {
@@ -38,7 +77,7 @@ const Glidepath = () => {
             1: { 1: 0, 3: 0, 5: 0 }
         };
 
-        data.forEach(entry => {
+        filteredData.forEach(entry => {
             const severity = entry.defectRating;
             const control = entry.controlRating.Workstation || 0;
 
@@ -52,7 +91,7 @@ const Glidepath = () => {
         });
 
         return matrix;
-    }, [data]);
+    }, [filteredData]);
 
     const glidepathData = useMemo(() => {
         // Mapping for lower matrix: [severity][control]
@@ -62,7 +101,7 @@ const Glidepath = () => {
             1: { 1: { count: 0, rec: 0 }, 3: { count: 0, rec: 0 }, 5: { count: 0, rec: 0 } }
         };
 
-        data.forEach(entry => {
+        filteredData.forEach(entry => {
             const severity = entry.defectRating;
             const control = entry.controlRating.Shop || 0;
             const rec = entry.recurrence || 0;
@@ -78,7 +117,7 @@ const Glidepath = () => {
         });
 
         return matrix;
-    }, [data]);
+    }, [filteredData]);
 
     if (loading) {
         return (
@@ -93,16 +132,46 @@ const Glidepath = () => {
             {/* Header */}
             <nav className="bg-white border-b border-slate-200 sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-1">
                         <Link to="/">
                             <Button variant="ghost" size="icon" className="text-slate-500 hover:text-primary">
                                 <ArrowLeft className="h-5 w-5" />
                             </Button>
                         </Link>
-                        <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
+                        <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2 whitespace-nowrap">
                             <BarChart3 className="h-5 w-5 text-primary" />
                             Glidepath + Quick Overview on QAM
                         </h1>
+
+                        <div className="hidden md:flex items-center gap-2 ml-8 bg-slate-50 border border-slate-200 p-1 rounded-lg">
+                            <div className="flex items-center gap-1.5 px-2">
+                                <Filter className="h-3 w-3 text-slate-400" />
+                                <span className="text-[10px] font-black text-slate-500 uppercase">Range</span>
+                            </div>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={e => setStartDate(e.target.value)}
+                                className="bg-transparent border-none text-xs focus:ring-0 p-0 w-28 font-medium text-slate-700"
+                            />
+                            <span className="text-slate-300">—</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={e => setEndDate(e.target.value)}
+                                className="bg-transparent border-none text-xs focus:ring-0 p-0 w-28 font-medium text-slate-700"
+                            />
+                            {(startDate || endDate) && (
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6 text-slate-400 hover:text-destructive"
+                                    onClick={() => { setStartDate(""); setEndDate(""); }}
+                                >
+                                    <X className="h-3 w-3" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <Link to="/defect-dashboard">

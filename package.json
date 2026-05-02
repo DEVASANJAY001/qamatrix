@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "npm-run-all --parallel vite server",
+    "vite": "vite",
     "server": "node server/index.js",
-    "dev:full": "npm-run-all --parallel dev server",
+    "dev:full": "npm-run-all --parallel vite server",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
